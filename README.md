@@ -17,8 +17,12 @@ Squires. What's new in this fork:
   volume.
 - **Saved sources.** Built-in shortcuts plus your own bookmarks, e.g. your home
   Jellyfin or Plex server.
-- **Video only.** Hides the website around the video so a small picture is all
-  video.
+- **Fills the window.** No scrollbars, and when a video starts playing the
+  player fills the whole picture (the sites' own fullscreen buttons do the
+  same). Press Menu in the remote to switch back to the full page.
+- **Trackpads.** In the remote, the right trackpad (or right stick) is a mouse,
+  clicking the right trackpad clicks, and the left trackpad scrolls.
+- **Nine positions:** corners, middle of each side, and center.
 
 ## Install (developer mode)
 
@@ -46,7 +50,10 @@ Open the Quick Access Menu (`...` button), then the Decky tab, then Couch PiP.
 | L1 / R1 | Back / ahead 10 seconds |
 | L2 / R2 | Volume down / up |
 | View | Browser back |
-| Menu | Video only / full page |
+| Menu | Fill window / full page |
+| Right trackpad or right stick | Move the mouse cursor |
+| Right trackpad click | Click under the cursor |
+| Left trackpad | Scroll |
 
 When you close the Quick Access Menu, the picture stays on top of your game and
 the controller goes back to the game.

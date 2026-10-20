@@ -18,6 +18,7 @@ export enum Position {
     BottomLeft,
     Left,
     TopLeft,
+    Center,
 }
 
 export const POSITION_LABELS: Record<Position, string> = {
@@ -29,6 +30,7 @@ export const POSITION_LABELS: Record<Position, string> = {
     [Position.Bottom]: "Bottom",
     [Position.BottomLeft]: "Bottom left",
     [Position.Left]: "Left",
+    [Position.Center]: "Center",
 };
 
 // Picture width as a share of the screen width. 16:9 video.

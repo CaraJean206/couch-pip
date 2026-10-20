@@ -1,4 +1,4 @@
-import { ButtonItem, Field, Focusable, DialogButton, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
+import { ButtonItem, Focusable, DialogButton, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
 import { useEffect, useState } from "react";
 import { FaBackward, FaForward, FaGamepad, FaPlay, FaTv, FaVolumeDown, FaVolumeUp } from "react-icons/fa";
 
@@ -12,11 +12,56 @@ import { MARGINS, POSITION_LABELS, Position, SIZES, ViewMode, getScreen, hostOf 
 const nearestIndex = (list: { value: number }[], v: number) =>
     list.reduce((best, item, i) => (Math.abs(item.value - v) < Math.abs(list[best].value - v) ? i : best), 0);
 
-const POSITION_ORDER = [
-    Position.TopLeft, Position.Top, Position.TopRight, Position.Right,
-    Position.BottomRight, Position.Bottom, Position.BottomLeft, Position.Left,
+// 3×3 grid of spots, laid out like the screen.
+const GRID: Position[][] = [
+    [Position.TopLeft, Position.Top, Position.TopRight],
+    [Position.Left, Position.Center, Position.Right],
+    [Position.BottomLeft, Position.Bottom, Position.BottomRight],
 ];
 
+const PositionGrid = () => {
+    const { position } = useStore();
+    return (
+        <div style={{ width: "100%" }}>
+            <div style={{ fontSize: 14, marginBottom: 6 }}>
+                Position: <b>{POSITION_LABELS[position]}</b>
+            </div>
+            <Focusable
+                flow-children="grid"
+                style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr 1fr",
+                    gap: 4,
+                    aspectRatio: "16 / 9",
+                    padding: 4,
+                    borderRadius: 6,
+                    border: "2px solid rgba(255,255,255,0.25)",
+                    background: "rgba(0,0,0,0.25)",
+                }}
+            >
+                {GRID.flat().map((p) => (
+                    <DialogButton
+                        key={p}
+                        onClick={() => setState({ position: p })}
+                        style={{
+                            minWidth: 0,
+                            minHeight: 0,
+                            height: "100%",
+                            padding: 0,
+                            background: p === position ? "#1a9fff" : undefined,
+                            color: p === position ? "#fff" : undefined,
+                        }}
+                    >
+                        {p === position ? "■" : ""}
+                    </DialogButton>
+                ))}
+            </Focusable>
+            <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
+                While this menu is open the picture moves left to stay visible.
+            </div>
+        </div>
+    );
+};
 const iconButton = { minWidth: 0, padding: "10px 0", flex: 1, display: "flex", justifyContent: "center" };
 
 const MediaRow = () => {
@@ -153,34 +198,20 @@ export const Settings = () => {
                         onChange={(v: boolean) => setState({ viewMode: v ? ViewMode.Expand : ViewMode.Picture })}
                     />
                 </PanelSectionRow>
+                <PanelSectionRow>
+                    <ToggleField
+                        label="Fill window when a video plays"
+                        description="Hides the rest of the website. Press Menu in the remote to switch back."
+                        checked={s.autofill}
+                        onChange={(v: boolean) => setState({ autofill: v })}
+                    />
+                </PanelSectionRow>
             </PanelSection>
 
             {s.viewMode === ViewMode.Picture && (
                 <PanelSection title="Picture">
                     <PanelSectionRow>
-                        <Field label="Position" childrenContainerWidth="max">
-                            <Focusable style={{ display: "flex", gap: 6 }} flow-children="horizontal">
-                                <DialogButton
-                                    style={{ minWidth: 0, flex: 1 }}
-                                    onClick={() => {
-                                        const i = POSITION_ORDER.indexOf(s.position);
-                                        setState({ position: POSITION_ORDER[(i + POSITION_ORDER.length - 1) % POSITION_ORDER.length] });
-                                    }}
-                                >
-                                    ◀
-                                </DialogButton>
-                                <div style={{ flex: 3, textAlign: "center", alignSelf: "center" }}>{POSITION_LABELS[s.position]}</div>
-                                <DialogButton
-                                    style={{ minWidth: 0, flex: 1 }}
-                                    onClick={() => {
-                                        const i = POSITION_ORDER.indexOf(s.position);
-                                        setState({ position: POSITION_ORDER[(i + 1) % POSITION_ORDER.length] });
-                                    }}
-                                >
-                                    ▶
-                                </DialogButton>
-                            </Focusable>
-                        </Field>
+                        <PositionGrid />
                     </PanelSectionRow>
                     <PanelSectionRow>
                         <SliderField

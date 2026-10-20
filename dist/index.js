@@ -201,7 +201,8 @@ var POSITION_LABELS = {
   [3 /* BottomRight */]: "Bottom right",
   [4 /* Bottom */]: "Bottom",
   [5 /* BottomLeft */]: "Bottom left",
-  [6 /* Left */]: "Left"
+  [6 /* Left */]: "Left",
+  [8 /* Center */]: "Center"
 };
 var SIZES = [
   { label: "S", value: 0.2 },
@@ -256,10 +257,42 @@ var definePlugin = (fn) => () => fn();
 var import_ui2 = __toESM(require_ui(), 1);
 var import_react4 = __toESM(require_react(), 1);
 
+// src/backend.ts
+var attach = callable("attach");
+var detach = callable("detach");
+var listTargets = callable("list_targets");
+var nav = callable("nav");
+var click = callable("click");
+var key = callable("key");
+var insertText = callable("insert_text");
+var media = callable("media");
+var back = callable("back");
+var reload = callable("reload");
+var setOptions = callable("set_options");
+var pointer = callable("pointer");
+var ensureAttached = async (url, tries = 8) => {
+  let last = { ok: false, error: "not tried" };
+  for (let i = 0; i < tries; i++) {
+    last = await attach(url);
+    if (last.ok) return last;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return last;
+};
+var withPage = async (url, action) => {
+  let res = await action();
+  if (!res.ok && /not connected|session closed|websocket closed/i.test(res.error ?? "")) {
+    const a = await ensureAttached(url, 4);
+    if (!a.ok) return { ok: false, error: a.error };
+    res = await action();
+  }
+  return res;
+};
+
 // src/store.ts
 var import_react3 = __toESM(require_react(), 1);
 var STORAGE_KEY = "couch-pip";
-var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels"];
+var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill"];
 var defaults = {
   viewMode: 3 /* Closed */,
   previousMode: 2 /* Picture */,
@@ -270,7 +303,8 @@ var defaults = {
   url: "https://www.youtube.com",
   bookmarks: [],
   useDevicePixels: false,
-  showDiagnostics: false
+  showDiagnostics: false,
+  autofill: true
 };
 var load = () => {
   try {
@@ -428,11 +462,29 @@ var computeBounds = (s, obs) => {
       break;
     case 7 /* TopLeft */:
       break;
+    case 8 /* Center */:
+      x = centerX;
+      y = centerY;
+      break;
   }
   return { x: Math.round(x), y: Math.round(y), width, height };
 };
+var useAutoAttach = (url, autofill) => {
+  (0, import_react4.useEffect)(() => {
+    let cancelled = false;
+    (async () => {
+      await setOptions(autofill);
+      const r = await ensureAttached(url, 20);
+      if (!cancelled && !r.ok) console.warn("Couch PiP: couldn't connect to page", r.error);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [url, autofill]);
+};
 var Pip = () => {
   const s = useStore();
+  useAutoAttach(s.url, s.autofill);
   const obs = useObstructions();
   const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0, keyboard: false } : obs);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels });
@@ -445,36 +497,6 @@ var PipOuter = () => {
 // src/settings.tsx
 var import_ui5 = __toESM(require_ui(), 1);
 var import_react7 = __toESM(require_react(), 1);
-
-// src/backend.ts
-var attach = callable("attach");
-var detach = callable("detach");
-var listTargets = callable("list_targets");
-var nav = callable("nav");
-var click = callable("click");
-var key = callable("key");
-var insertText = callable("insert_text");
-var media = callable("media");
-var back = callable("back");
-var reload = callable("reload");
-var ensureAttached = async (url, tries = 8) => {
-  let last = { ok: false, error: "not tried" };
-  for (let i = 0; i < tries; i++) {
-    last = await attach(url);
-    if (last.ok) return last;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return last;
-};
-var withPage = async (url, action) => {
-  let res = await action();
-  if (!res.ok && /not connected|session closed|websocket closed/i.test(res.error ?? "")) {
-    const a = await ensureAttached(url, 4);
-    if (!a.ok) return { ok: false, error: a.error };
-    res = await action();
-  }
-  return res;
-};
 
 // src/modals.tsx
 var import_ui3 = __toESM(require_ui(), 1);
@@ -644,11 +666,88 @@ var GUIDE = [
   ["L1 / R1", "Back / ahead 10s"],
   ["L2 / R2", "Volume"],
   ["View", "Browser back"],
-  ["Menu", "Video only / full page"]
+  ["Menu", "Fill window / full page"],
+  ["Right pad / stick", "Mouse"],
+  ["Right pad click", "Click"],
+  ["Left pad", "Scroll"]
 ];
+var bit = (value, n) => Math.floor(Number(value) / 2 ** n) % 2 === 1;
+var PAD_RANGE = 65536;
+var PAD_SPEED = 0.9;
+var SCROLL_SPEED = 2;
+var ASPECT_FIX = 16 / 9;
+var usePadMouse = () => {
+  (0, import_react6.useEffect)(() => {
+    const input = window.SteamClient?.Input;
+    if (!input?.RegisterForControllerStateChanges) return;
+    const acc = { dx: 0, dy: 0, wheel: 0, click: false };
+    let right = null;
+    let left = null;
+    let rightClickDown = false;
+    let stick = { x: 0, y: 0 };
+    let inflight = false;
+    const reg = input.RegisterForControllerStateChanges((changes) => {
+      for (const c of changes) {
+        const b = c.ulButtons;
+        const rTouch = bit(b, 20) || c.sRightPadX !== 0 || c.sRightPadY !== 0;
+        const lTouch = bit(b, 19) || c.sLeftPadX !== 0 || c.sLeftPadY !== 0;
+        if (rTouch) {
+          if (right) {
+            const dx = (c.sRightPadX - right.x) / PAD_RANGE;
+            const dy = (c.sRightPadY - right.y) / PAD_RANGE;
+            if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) {
+              acc.dx += dx * PAD_SPEED;
+              acc.dy -= dy * PAD_SPEED * ASPECT_FIX;
+            }
+          }
+          right = { x: c.sRightPadX, y: c.sRightPadY };
+        } else {
+          right = null;
+        }
+        if (lTouch) {
+          if (left) {
+            const dy = (c.sLeftPadY - left.y) / PAD_RANGE;
+            if (Math.abs(dy) < 0.25) acc.wheel -= dy * SCROLL_SPEED;
+          }
+          left = { x: c.sLeftPadX, y: c.sLeftPadY };
+        } else {
+          left = null;
+        }
+        const click2 = bit(b, 18);
+        if (click2 && !rightClickDown) acc.click = true;
+        rightClickDown = click2;
+        stick = { x: (c.sRightStickX ?? 0) / 32767, y: (c.sRightStickY ?? 0) / 32767 };
+      }
+    });
+    const timer = setInterval(() => {
+      const mag = Math.hypot(stick.x, stick.y);
+      const deadzone = 0.2;
+      if (mag > deadzone) {
+        const k = ((mag - deadzone) / (1 - deadzone)) ** 2 * 0.02 / mag;
+        acc.dx += stick.x * k;
+        acc.dy -= stick.y * k * ASPECT_FIX;
+      }
+      const moved = Math.abs(acc.dx) + Math.abs(acc.dy) > 5e-4;
+      const scrolled = Math.abs(acc.wheel) > 2e-3;
+      if (!moved && !scrolled && !acc.click || inflight) return;
+      const send = { ...acc };
+      acc.dx = acc.dy = acc.wheel = 0;
+      acc.click = false;
+      inflight = true;
+      pointer(send.dx, send.dy, scrolled ? send.wheel : 0, send.click).catch(() => void 0).finally(() => {
+        inflight = false;
+      });
+    }, 33);
+    return () => {
+      clearInterval(timer);
+      reg?.unregister?.();
+    };
+  }, []);
+};
 var RemoteModal = ({ closeModal }) => {
   const [status, setStatus] = (0, import_react6.useState)("Connecting to the page\u2026");
   const busy = (0, import_react6.useRef)(false);
+  usePadMouse();
   (0, import_react6.useEffect)(() => {
     setState((s) => ({
       previousMode: s.viewMode === 4 /* Remote */ || s.viewMode === 3 /* Closed */ ? 2 /* Picture */ : s.viewMode,
@@ -716,7 +815,7 @@ var RemoteModal = ({ closeModal }) => {
         run(() => back());
         break;
       case import_ui4.GamepadButton.START:
-        run(() => media("videoonly", 0));
+        run(() => media("fill", 0));
         break;
       default:
         return;
@@ -753,16 +852,53 @@ var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_
 // src/settings.tsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
 var nearestIndex = (list, v) => list.reduce((best, item, i) => Math.abs(item.value - v) < Math.abs(list[best].value - v) ? i : best, 0);
-var POSITION_ORDER = [
-  7 /* TopLeft */,
-  0 /* Top */,
-  1 /* TopRight */,
-  2 /* Right */,
-  3 /* BottomRight */,
-  4 /* Bottom */,
-  5 /* BottomLeft */,
-  6 /* Left */
+var GRID = [
+  [7 /* TopLeft */, 0 /* Top */, 1 /* TopRight */],
+  [6 /* Left */, 8 /* Center */, 2 /* Right */],
+  [5 /* BottomLeft */, 4 /* Bottom */, 3 /* BottomRight */]
 ];
+var PositionGrid = () => {
+  const { position } = useStore();
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { width: "100%" }, children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { fontSize: 14, marginBottom: 6 }, children: [
+      "Position: ",
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("b", { children: POSITION_LABELS[position] })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.Focusable,
+      {
+        "flow-children": "grid",
+        style: {
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr 1fr",
+          gap: 4,
+          aspectRatio: "16 / 9",
+          padding: 4,
+          borderRadius: 6,
+          border: "2px solid rgba(255,255,255,0.25)",
+          background: "rgba(0,0,0,0.25)"
+        },
+        children: GRID.flat().map((p) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+          import_ui5.DialogButton,
+          {
+            onClick: () => setState({ position: p }),
+            style: {
+              minWidth: 0,
+              minHeight: 0,
+              height: "100%",
+              padding: 0,
+              background: p === position ? "#1a9fff" : void 0,
+              color: p === position ? "#fff" : void 0
+            },
+            children: p === position ? "\u25A0" : ""
+          },
+          p
+        ))
+      }
+    ),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: 11, opacity: 0.6, marginTop: 4 }, children: "While this menu is open the picture moves left to stay visible." })
+  ] });
+};
 var iconButton = { minWidth: 0, padding: "10px 0", flex: 1, display: "flex", justifyContent: "center" };
 var MediaRow = () => {
   const [msg, setMsg] = (0, import_react7.useState)("");
@@ -862,34 +998,19 @@ var Settings = () => {
           checked: s.viewMode === 1 /* Expand */,
           onChange: (v) => setState({ viewMode: v ? 1 /* Expand */ : 2 /* Picture */ })
         }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        import_ui5.ToggleField,
+        {
+          label: "Fill window when a video plays",
+          description: "Hides the rest of the website. Press Menu in the remote to switch back.",
+          checked: s.autofill,
+          onChange: (v) => setState({ autofill: v })
+        }
       ) })
     ] }),
     s.viewMode === 2 /* Picture */ && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.PanelSection, { title: "Picture", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.Field, { label: "Position", childrenContainerWidth: "max", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.Focusable, { style: { display: "flex", gap: 6 }, "flow-children": "horizontal", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-          import_ui5.DialogButton,
-          {
-            style: { minWidth: 0, flex: 1 },
-            onClick: () => {
-              const i = POSITION_ORDER.indexOf(s.position);
-              setState({ position: POSITION_ORDER[(i + POSITION_ORDER.length - 1) % POSITION_ORDER.length] });
-            },
-            children: "\u25C0"
-          }
-        ),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { flex: 3, textAlign: "center", alignSelf: "center" }, children: POSITION_LABELS[s.position] }),
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-          import_ui5.DialogButton,
-          {
-            style: { minWidth: 0, flex: 1 },
-            onClick: () => {
-              const i = POSITION_ORDER.indexOf(s.position);
-              setState({ position: POSITION_ORDER[(i + 1) % POSITION_ORDER.length] });
-            },
-            children: "\u25B6"
-          }
-        )
-      ] }) }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(PositionGrid, {}) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
         import_ui5.SliderField,
         {

@@ -343,24 +343,194 @@ JS_MEDIA = r"""
       return 'Volume ' + Math.round(v.volume * 100) + '%%';
     case 'mute':
       v.muted = !v.muted; return v.muted ? 'Muted' : 'Unmuted';
-    case 'videoonly': {
-      const id = '__cpip_videoonly';
-      const old = document.getElementById(id);
-      if (old) { old.remove(); v.classList.remove('__cpip_vo'); return 'Full page'; }
-      const s = document.createElement('style');
-      s.id = id;
-      s.textContent = '.__cpip_vo{position:fixed !important;inset:0 !important;width:100vw !important;' +
-        'height:100vh !important;max-width:none !important;max-height:none !important;z-index:2147483647 !important;' +
-        'background:#000 !important;object-fit:contain !important;transform:none !important;margin:0 !important}' +
-        'html,body{overflow:hidden !important}';
-      (document.head || document.documentElement).appendChild(s);
-      v.classList.add('__cpip_vo');
-      return 'Video only';
-    }
+    case 'videoonly':
+    case 'fill':
+      return window.__cpip ? window.__cpip.toggleFill(v) : 'Page helper not loaded';
     case 'status':
       return { paused: v.paused, time: v.currentTime, duration: v.duration, volume: v.volume, muted: v.muted };
   }
   return 'Unknown action';
+})()
+"""
+
+# Installed into every page the PiP view loads (and re-run on each new page):
+# - hides scrollbars
+# - "fill": makes the video player cover the whole PiP window
+# - fills automatically when a real video starts (not muted previews/trailers)
+# - turns the sites' own fullscreen buttons into "fill the PiP window"
+# - draws the trackpad mouse cursor
+JS_HELPER = r"""
+(() => {
+  const OPTS = __OPTS__;
+  if (window.__cpip) { Object.assign(window.__cpip.opts, OPTS); return 'updated'; }
+
+  const css = `
+    *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
+    html, body { scrollbar-width: none !important; }
+    .__cpip_fill { position: fixed !important; inset: 0 !important; left: 0 !important; top: 0 !important;
+      width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important;
+      min-width: 0 !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important;
+      transform: none !important; z-index: 2147483646 !important; background: #000 !important; }
+    video.__cpip_fill, .__cpip_fill video { width: 100% !important; height: 100% !important; left: 0 !important;
+      top: 0 !important; object-fit: contain !important; }
+    .__cpip_hide { visibility: hidden !important; }
+    html.__cpip_filled, html.__cpip_filled body { overflow: hidden !important; }
+    #__cpip_cursor { position: fixed; left: 0; top: 0; width: 22px; height: 22px; z-index: 2147483647;
+      pointer-events: none; transition: opacity .3s; opacity: 0; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
+  `;
+  const addStyle = () => {
+    if (document.getElementById('__cpip_helper_style')) return;
+    const s = document.createElement('style');
+    s.id = '__cpip_helper_style';
+    s.textContent = css;
+    (document.head || document.documentElement).appendChild(s);
+  };
+  if (document.documentElement) addStyle();
+  document.addEventListener('DOMContentLoaded', addStyle);
+
+  const state = { el: null, video: null, hidden: [], dismissed: null };
+
+  // The player box: the outermost ancestor that is the same size as the video,
+  // so controls and subtitles come along.
+  const playerFor = (v) => {
+    const r = v.getBoundingClientRect();
+    let best = v, el = v.parentElement;
+    while (el && el !== document.body && el !== document.documentElement) {
+      const p = el.getBoundingClientRect();
+      if (Math.abs(p.width - r.width) > 6 || Math.abs(p.height - r.height) > 6) break;
+      best = el;
+      el = el.parentElement;
+    }
+    return best;
+  };
+
+  const largestVideo = () => [...document.querySelectorAll('video')]
+    .sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0] || null;
+
+  const unfill = () => {
+    if (state.el) state.el.classList.remove('__cpip_fill');
+    state.hidden.forEach((e) => e.classList.remove('__cpip_hide'));
+    state.hidden = [];
+    state.el = null;
+    state.video = null;
+    document.documentElement.classList.remove('__cpip_filled');
+  };
+
+  const fill = (el, video) => {
+    if (!el) return;
+    unfill();
+    addStyle();
+    el.classList.add('__cpip_fill');
+    // Hide everything that isn't the player or one of its ancestors.
+    for (let node = el; node && node !== document.documentElement; node = node.parentElement) {
+      const parent = node.parentElement;
+      if (!parent) break;
+      for (const sib of parent.children) {
+        if (sib !== node && !sib.classList.contains('__cpip_hide') && sib.tagName !== 'STYLE' && sib.tagName !== 'SCRIPT') {
+          sib.classList.add('__cpip_hide');
+          state.hidden.push(sib);
+        }
+      }
+    }
+    state.el = el;
+    state.video = video || el.querySelector('video') || (el.tagName === 'VIDEO' ? el : null);
+    document.documentElement.classList.add('__cpip_filled');
+  };
+
+  const toggleFill = (v) => {
+    if (state.el) {
+      const dv = state.video;
+      state.dismissed = dv ? { video: dv, src: dv.currentSrc || dv.src } : null;
+      unfill();
+      return 'Full page';
+    }
+    v = v || largestVideo();
+    if (!v) return 'No video on this page';
+    state.dismissed = null;
+    fill(playerFor(v), v);
+    return 'Filling window';
+  };
+
+  // Sites' fullscreen buttons: fill the PiP window instead of the real screen.
+  let fsEl = null, lastFs = null;
+  const fireFs = () => {
+    const target = fsEl || lastFs || document;
+    for (const name of ['fullscreenchange', 'webkitfullscreenchange']) {
+      target.dispatchEvent(new Event(name, { bubbles: true }));
+    }
+  };
+  const request = function () {
+    const el = this === document.documentElement || this === document.body
+      ? (largestVideo() ? playerFor(largestVideo()) : null) : this;
+    if (el) fill(el, el.querySelector ? el.querySelector('video') : null);
+    fsEl = lastFs = this;
+    setTimeout(fireFs, 0);
+    return Promise.resolve();
+  };
+  const exit = function () {
+    unfill();
+    fsEl = null;
+    setTimeout(fireFs, 0);
+    return Promise.resolve();
+  };
+  try {
+    Element.prototype.requestFullscreen = request;
+    Element.prototype.webkitRequestFullscreen = request;
+    Element.prototype.webkitRequestFullScreen = request;
+    Document.prototype.exitFullscreen = exit;
+    Document.prototype.webkitExitFullscreen = exit;
+    Document.prototype.webkitCancelFullScreen = exit;
+    for (const name of ['fullscreenElement', 'webkitFullscreenElement', 'webkitCurrentFullScreenElement']) {
+      Object.defineProperty(Document.prototype, name, { configurable: true, get: () => fsEl });
+    }
+    for (const name of ['fullscreenEnabled', 'webkitFullscreenEnabled']) {
+      Object.defineProperty(Document.prototype, name, { configurable: true, get: () => true });
+    }
+    Object.defineProperty(Document.prototype, 'webkitIsFullScreen', { configurable: true, get: () => !!fsEl });
+  } catch (e) {}
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && fsEl) document.exitFullscreen();
+  }, true);
+
+  // Auto-fill when a real video plays; undo when it goes away or ends.
+  const isRealPlayback = (v) => !v.paused && !v.muted && v.readyState > 2 &&
+    (v.duration > 90 || v.duration === Infinity) && v.getBoundingClientRect().width > 80;
+  setInterval(() => {
+    if (state.el && (!state.el.isConnected || (state.video && (!state.video.isConnected || state.video.ended)))) {
+      unfill();
+      fsEl = null;
+    }
+    if (!window.__cpip.opts.autofill || state.el) return;
+    const v = [...document.querySelectorAll('video')].find(isRealPlayback);
+    const d = state.dismissed;
+    if (v && !(d && d.video === v && d.src === (v.currentSrc || v.src))) fill(playerFor(v), v);
+  }, 1000);
+
+  // Trackpad cursor.
+  const cursor = { x: innerWidth / 2, y: innerHeight / 2, el: null, timer: null };
+  const showCursor = () => {
+    if (!cursor.el || !cursor.el.isConnected) {
+      const c = document.createElement('div');
+      c.id = '__cpip_cursor';
+      c.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 2l7 19 2.6-7.6L20 11z" ' +
+        'fill="#fff" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+      document.documentElement.appendChild(c);
+      cursor.el = c;
+    }
+    cursor.el.style.transform = `translate(${cursor.x - 3}px, ${cursor.y - 2}px)`;
+    cursor.el.style.opacity = '1';
+    clearTimeout(cursor.timer);
+    cursor.timer = setTimeout(() => { if (cursor.el) cursor.el.style.opacity = '0'; }, 3000);
+  };
+  const pointer = (dx, dy) => {
+    cursor.x = Math.min(innerWidth - 1, Math.max(0, cursor.x + dx * innerWidth));
+    cursor.y = Math.min(innerHeight - 1, Math.max(0, cursor.y + dy * innerHeight));
+    showCursor();
+    return { x: cursor.x, y: cursor.y, h: innerHeight };
+  };
+
+  window.__cpip = { opts: OPTS, fill, unfill, toggleFill, pointer, playerFor, state };
+  return 'installed';
 })()
 """
 
@@ -401,6 +571,8 @@ def _is_steam_page(url: str) -> bool:
 class Plugin:
     session: CDPSession | None = None
     lock: asyncio.Lock | None = None
+    opts: dict = {"autofill": True}
+    helper_script_id: str | None = None
 
     async def _main(self):
         self.lock = asyncio.Lock()
@@ -466,17 +638,50 @@ class Plugin:
         if self.session:
             self.session.close()
         try:
+            self.helper_script_id = None
             self.session = await CDPSession.open(t)
         except Exception as e:
             self.session = None
             return {"ok": False, "error": f"Couldn't connect to page: {e}"}
         log.info(f"attached to {t.get('url')} ({t['id']})")
+        await self._install_helper()
         return {"ok": True, "id": t["id"], "url": t.get("url"), "title": t.get("title")}
+
+    def _helper_source(self) -> str:
+        return JS_HELPER.replace("__OPTS__", json.dumps(self.opts))
+
+    async def _install_helper(self):
+        """Run the page helper now and on every page this view loads later."""
+        if not self.session or not self.session.alive:
+            return
+        source = self._helper_source()
+        try:
+            await self.session.send("Page.enable")
+        except Exception:
+            pass
+        try:
+            if self.helper_script_id:
+                await self.session.send("Page.removeScriptToEvaluateOnNewDocument", {"identifier": self.helper_script_id})
+            res = await self.session.send("Page.addScriptToEvaluateOnNewDocument", {"source": source})
+            self.helper_script_id = res.get("identifier")
+        except Exception as e:
+            log.warning(f"couldn't register page helper: {e}")
+        try:
+            await self.session.send("Runtime.evaluate", {"expression": source, "returnByValue": True})
+        except Exception as e:
+            log.warning(f"couldn't run page helper: {e}")
+
+    async def set_options(self, autofill: bool):
+        self.opts = {**self.opts, "autofill": bool(autofill)}
+        if self.session and self.session.alive:
+            await self._install_helper()
+        return {"ok": True, "opts": self.opts}
 
     async def detach(self):
         if self.session:
             self.session.close()
             self.session = None
+        self.helper_script_id = None
         return {"ok": True}
 
     async def _send(self, method: str, params: dict | None = None):
@@ -553,3 +758,33 @@ class Plugin:
 
     async def reload(self):
         return await self._safe(self._send("Page.reload", {}))
+
+    async def pointer(self, dx: float, dy: float, wheel: float = 0, click: bool = False):
+        """
+        Trackpad / stick mouse. dx, dy and wheel are fractions of the page size;
+        the page helper keeps the cursor position and draws it.
+        """
+
+        async def run():
+            expr = f"window.__cpip ? window.__cpip.pointer({float(dx)!r}, {float(dy)!r}) : null"
+            pos = await self._eval(expr)
+            if not pos:
+                await self._install_helper()
+                pos = await self._eval(expr)
+            if not pos:
+                return "Page helper not loaded"
+            x, y = pos["x"], pos["y"]
+            await self._send("Input.dispatchMouseEvent", {"type": "mouseMoved", "x": x, "y": y})
+            if wheel:
+                await self._send(
+                    "Input.dispatchMouseEvent",
+                    {"type": "mouseWheel", "x": x, "y": y, "deltaX": 0, "deltaY": float(wheel) * pos["h"]},
+                )
+            if click:
+                base = {"x": x, "y": y, "button": "left", "clickCount": 1}
+                await self._send("Input.dispatchMouseEvent", {"type": "mousePressed", **base})
+                await self._send("Input.dispatchMouseEvent", {"type": "mouseReleased", **base})
+                return "Clicked"
+            return ""
+
+        return await self._safe(run())

@@ -17,10 +17,11 @@ export interface State {
     bookmarks: Bookmark[];
     useDevicePixels: boolean;
     showDiagnostics: boolean;
+    autofill: boolean;
 }
 
 const STORAGE_KEY = "couch-pip";
-const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels"];
+const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill"];
 
 const defaults: State = {
     viewMode: ViewMode.Closed,
@@ -33,6 +34,7 @@ const defaults: State = {
     bookmarks: [],
     useDevicePixels: false,
     showDiagnostics: false,
+    autofill: true,
 };
 
 const load = (): State => {

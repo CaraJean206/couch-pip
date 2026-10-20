@@ -1,6 +1,7 @@
 import { Router, findModuleChild, findModuleExport, getGamepadNavigationTrees } from "@decky/ui";
 import { useEffect, useState } from "react";
 
+import * as backend from "./backend";
 import { State, useStore } from "./store";
 import { Position, ViewMode, ASPECT, getScreen } from "./util";
 
@@ -153,12 +154,29 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number; keyboar
         case Position.BottomLeft: y = bottom; break;
         case Position.Left: y = centerY; break;
         case Position.TopLeft: break;
+        case Position.Center: x = centerX; y = centerY; break;
     }
     return { x: Math.round(x), y: Math.round(y), width, height };
 };
 
+/** Connect to the page as soon as it loads, so scrollbars hide and auto-fill works. */
+const useAutoAttach = (url: string, autofill: boolean) => {
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            await backend.setOptions(autofill);
+            const r = await backend.ensureAttached(url, 20);
+            if (!cancelled && !r.ok) console.warn("Couch PiP: couldn't connect to page", r.error);
+        })();
+        return () => {
+            cancelled = true;
+        };
+    }, [url, autofill]);
+};
+
 const Pip = () => {
     const s = useStore();
+    useAutoAttach(s.url, s.autofill);
     const obs = useObstructions();
     const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0, keyboard: false } : obs);
     return <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />;
