@@ -204,12 +204,6 @@ var POSITION_LABELS = {
   [6 /* Left */]: "Left",
   [8 /* Center */]: "Center"
 };
-var SIZES = [
-  { label: "S", value: 0.2 },
-  { label: "M", value: 0.28 },
-  { label: "L", value: 0.36 },
-  { label: "XL", value: 0.46 }
-];
 var ASPECT = 9 / 16;
 var MARGINS = [
   { label: "0", value: 0 },
@@ -251,6 +245,7 @@ var api = window.__DECKY_SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED_deckyL
 var callable = (method) => (...args) => api.call(method, ...args);
 var routerHook = api.routerHook;
 var toaster = api.toaster;
+var fetchNoCors = api.fetchNoCors;
 var definePlugin = (fn) => () => fn();
 
 // src/pip.tsx
@@ -269,6 +264,7 @@ var media = callable("media");
 var back = callable("back");
 var reload = callable("reload");
 var setOptions = callable("set_options");
+var fillStatus = callable("fill_status");
 var pointer = callable("pointer");
 var ensureAttached = async (url, tries = 8) => {
   let last = { ok: false, error: "not tried" };
@@ -292,7 +288,7 @@ var withPage = async (url, action) => {
 // src/store.ts
 var import_react3 = __toESM(require_react(), 1);
 var STORAGE_KEY = "couch-pip";
-var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill"];
+var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "nudgeX", "nudgeY"];
 var defaults = {
   viewMode: 3 /* Closed */,
   previousMode: 2 /* Picture */,
@@ -304,7 +300,10 @@ var defaults = {
   bookmarks: [],
   useDevicePixels: false,
   showDiagnostics: false,
-  autofill: true
+  autofill: true,
+  nudgeX: 0,
+  nudgeY: 0,
+  update: null
 };
 var load = () => {
   try {
@@ -467,6 +466,10 @@ var computeBounds = (s, obs) => {
       y = centerY;
       break;
   }
+  x += (s.nudgeX ?? 0) * screen.width;
+  y += (s.nudgeY ?? 0) * screen.height;
+  x = Math.min(Math.max(x, box.x), box.x + box.width - width);
+  y = Math.min(Math.max(y, box.y), box.y + box.height - height);
   return { x: Math.round(x), y: Math.round(y), width, height };
 };
 var useAutoAttach = (url, autofill) => {
@@ -849,6 +852,65 @@ var RemoteModal = ({ closeModal }) => {
 };
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
+// src/updates.ts
+var VERSION = true ? "0.3.0" : "0.0.0";
+var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
+var isNewer = (a, b) => {
+  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d > 0;
+  }
+  return false;
+};
+var getJson = async (url) => {
+  try {
+    const r = await fetch(url, { cache: "no-store" });
+    if (r.ok) return await r.json();
+  } catch {
+  }
+  if (fetchNoCors) {
+    const r = await fetchNoCors(url);
+    if (r.ok) return await r.json();
+  }
+  throw new Error("Couldn't reach GitHub");
+};
+var checkForUpdate = async () => {
+  const info = await getJson(`${VERSION_URL}?t=${Date.now()}`);
+  if (!info?.version || !info?.zip) throw new Error("version.json is incomplete");
+  const update = isNewer(info.version, VERSION) ? info : null;
+  setState({ update });
+  return update;
+};
+var installUpdate = (u) => {
+  const backend = window.DeckyBackend;
+  return backend.call("utilities/install_plugin", u.zip, PLUGIN_NAME, u.version, u.sha256 ?? "", 2);
+};
+var startUpdateChecks = () => {
+  let notified = "";
+  const run = async () => {
+    try {
+      const u = await checkForUpdate();
+      if (u && notified !== u.version) {
+        notified = u.version;
+        toaster?.toast?.({
+          title: `${PLUGIN_NAME} ${u.version} is available`,
+          body: `Open ${PLUGIN_NAME} in the Quick Access Menu to update.`
+        });
+      }
+    } catch (e) {
+      console.warn(`${PLUGIN_NAME}: update check failed`, e);
+    }
+  };
+  const first = setTimeout(run, 2e4);
+  const every = setInterval(run, 6 * 60 * 60 * 1e3);
+  return () => {
+    clearTimeout(first);
+    clearInterval(every);
+  };
+};
+
 // src/settings.tsx
 var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
 var nearestIndex = (list, v) => list.reduce((best, item, i) => Math.abs(item.value - v) < Math.abs(list[best].value - v) ? i : best, 0);
@@ -881,7 +943,7 @@ var PositionGrid = () => {
         children: GRID.flat().map((p) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
           import_ui5.DialogButton,
           {
-            onClick: () => setState({ position: p }),
+            onClick: () => setState({ position: p, nudgeX: 0, nudgeY: 0 }),
             style: {
               minWidth: 0,
               minHeight: 0,
@@ -960,8 +1022,47 @@ var Diagnostics = () => {
         children: "List browser pages"
       }
     ) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ButtonItem,
+      {
+        layout: "below",
+        onClick: async () => {
+          const r = await withPage(getState().url, () => fillStatus());
+          setTargets(r.ok ? JSON.stringify(r.result, null, 1) : r.error ?? "error");
+        },
+        children: "Check video fill"
+      }
+    ) }),
     targets && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.8 }, children: targets }) })
   ] });
+};
+var UpdateBanner = () => {
+  const { update } = useStore();
+  if (!update) return null;
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSection, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.ButtonItem, { layout: "below", onClick: () => installUpdate(update), children: [
+    "\u2B06 Update to ",
+    update.version
+  ] }) }) });
+};
+var VersionRow = () => {
+  const [msg, setMsg] = (0, import_react7.useState)("");
+  return /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSection, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+    import_ui5.ButtonItem,
+    {
+      layout: "below",
+      description: msg || `Version ${VERSION}`,
+      onClick: async () => {
+        setMsg("Checking\u2026");
+        try {
+          const u = await checkForUpdate();
+          setMsg(u ? `Version ${u.version} is available` : `Version ${VERSION} is the newest`);
+        } catch (e) {
+          setMsg(`Couldn't check: ${e?.message ?? e}`);
+        }
+      },
+      children: "Check for updates"
+    }
+  ) }) });
 };
 var Settings = () => {
   const s = useStore();
@@ -970,18 +1071,22 @@ var Settings = () => {
     setState({ visible: true });
   }, []);
   if (!open) {
-    return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.PanelSection, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.ButtonItem, { layout: "below", onClick: () => setState({ viewMode: 2 /* Picture */, visible: true }), children: [
-        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaTv, { style: { marginRight: 8 } }),
-        "Open ",
-        hostOf(s.url)
-      ] }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.ButtonItem, { layout: "below", onClick: showSourcesModal, children: "Choose what to watch\u2026" }) })
+    return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(UpdateBanner, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.PanelSection, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.ButtonItem, { layout: "below", onClick: () => setState({ viewMode: 2 /* Picture */, visible: true }), children: [
+          /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaTv, { style: { marginRight: 8 } }),
+          "Open ",
+          hostOf(s.url)
+        ] }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.ButtonItem, { layout: "below", onClick: showSourcesModal, children: "Choose what to watch\u2026" }) })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(VersionRow, {})
     ] });
   }
-  const sizeIndex = nearestIndex(SIZES, s.size);
   const marginIndex = nearestIndex(MARGINS, s.margin);
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(UpdateBanner, {}),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.PanelSection, { children: [
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.ButtonItem, { layout: "below", onClick: showRemote, children: [
         /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaGamepad, { style: { marginRight: 8 } }),
@@ -1015,14 +1120,15 @@ var Settings = () => {
         import_ui5.SliderField,
         {
           label: "Size",
-          value: sizeIndex,
-          min: 0,
-          max: SIZES.length - 1,
+          description: "Width of the picture as a share of the screen",
+          value: Math.round(s.size * 100),
+          min: 10,
+          max: 80,
           step: 1,
-          notchCount: SIZES.length,
-          notchTicksVisible: true,
-          notchLabels: SIZES.map((x, i) => ({ label: x.label, notchIndex: i, value: i })),
-          onChange: (i) => setState({ size: SIZES[i].value })
+          showValue: true,
+          valueSuffix: "%",
+          resetValue: 28,
+          onChange: (v) => setState({ size: v / 100 })
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
@@ -1037,6 +1143,34 @@ var Settings = () => {
           notchTicksVisible: true,
           notchLabels: MARGINS.map((x, i) => ({ label: x.label, notchIndex: i, value: i })),
           onChange: (i) => setState({ margin: MARGINS[i].value })
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        import_ui5.SliderField,
+        {
+          label: "Fine tune: left / right",
+          value: Math.round((s.nudgeX ?? 0) * 100),
+          min: -30,
+          max: 30,
+          step: 1,
+          showValue: true,
+          valueSuffix: "%",
+          resetValue: 0,
+          onChange: (v) => setState({ nudgeX: v / 100 })
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        import_ui5.SliderField,
+        {
+          label: "Fine tune: up / down",
+          value: Math.round((s.nudgeY ?? 0) * 100),
+          min: -30,
+          max: 30,
+          step: 1,
+          showValue: true,
+          valueSuffix: "%",
+          resetValue: 0,
+          onChange: (v) => setState({ nudgeY: v / 100 })
         }
       ) })
     ] }),
@@ -1061,7 +1195,8 @@ var Settings = () => {
         }
       ) })
     ] }),
-    s.showDiagnostics && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Diagnostics, {})
+    s.showDiagnostics && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Diagnostics, {}),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(VersionRow, {})
   ] });
 };
 
@@ -1070,6 +1205,7 @@ var import_jsx_runtime5 = __toESM(require_jsx_runtime(), 1);
 var index_default = definePlugin(() => {
   setState({ viewMode: 3 /* Closed */, visible: true });
   routerHook.addGlobalComponent("CouchPiP", PipOuter);
+  const stopUpdates = startUpdateChecks();
   return {
     name: PLUGIN_NAME,
     titleView: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)("div", { className: import_ui6.staticClasses.Title, children: PLUGIN_NAME }),
@@ -1077,6 +1213,7 @@ var index_default = definePlugin(() => {
     content: /* @__PURE__ */ (0, import_jsx_runtime5.jsx)(Settings, {}),
     onDismount() {
       routerHook.removeGlobalComponent("CouchPiP");
+      stopUpdates();
     }
   };
 });

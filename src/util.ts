@@ -33,13 +33,7 @@ export const POSITION_LABELS: Record<Position, string> = {
     [Position.Center]: "Center",
 };
 
-// Picture width as a share of the screen width. 16:9 video.
-export const SIZES = [
-    { label: "S", value: 0.2 },
-    { label: "M", value: 0.28 },
-    { label: "L", value: 0.36 },
-    { label: "XL", value: 0.46 },
-];
+// Pictures are 16:9.
 export const ASPECT = 9 / 16;
 
 // Margin around the picture as a share of the screen height.

@@ -6,8 +6,9 @@ import * as backend from "./backend";
 import { showAddressModal, showSourcesModal } from "./modals";
 import { lastBounds } from "./pip";
 import { showRemote } from "./remote";
+import { VERSION, checkForUpdate, installUpdate } from "./updates";
 import { getState, setState, useStore } from "./store";
-import { MARGINS, POSITION_LABELS, Position, SIZES, ViewMode, getScreen, hostOf } from "./util";
+import { MARGINS, POSITION_LABELS, Position, ViewMode, getScreen, hostOf } from "./util";
 
 const nearestIndex = (list: { value: number }[], v: number) =>
     list.reduce((best, item, i) => (Math.abs(item.value - v) < Math.abs(list[best].value - v) ? i : best), 0);
@@ -42,7 +43,7 @@ const PositionGrid = () => {
                 {GRID.flat().map((p) => (
                     <DialogButton
                         key={p}
-                        onClick={() => setState({ position: p })}
+                        onClick={() => setState({ position: p, nudgeX: 0, nudgeY: 0 })}
                         style={{
                             minWidth: 0,
                             minHeight: 0,
@@ -131,11 +132,61 @@ const Diagnostics = () => {
                     List browser pages
                 </ButtonItem>
             </PanelSectionRow>
+            <PanelSectionRow>
+                <ButtonItem
+                    layout="below"
+                    onClick={async () => {
+                        const r = await backend.withPage(getState().url, () => backend.fillStatus());
+                        setTargets(r.ok ? JSON.stringify(r.result, null, 1) : r.error ?? "error");
+                    }}
+                >
+                    Check video fill
+                </ButtonItem>
+            </PanelSectionRow>
             {targets && (
                 <PanelSectionRow>
                     <div style={{ fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.8 }}>{targets}</div>
                 </PanelSectionRow>
             )}
+        </PanelSection>
+    );
+};
+
+const UpdateBanner = () => {
+    const { update } = useStore();
+    if (!update) return null;
+    return (
+        <PanelSection>
+            <PanelSectionRow>
+                <ButtonItem layout="below" onClick={() => installUpdate(update)}>
+                    ⬆ Update to {update.version}
+                </ButtonItem>
+            </PanelSectionRow>
+        </PanelSection>
+    );
+};
+
+const VersionRow = () => {
+    const [msg, setMsg] = useState("");
+    return (
+        <PanelSection>
+            <PanelSectionRow>
+                <ButtonItem
+                    layout="below"
+                    description={msg || `Version ${VERSION}`}
+                    onClick={async () => {
+                        setMsg("Checking…");
+                        try {
+                            const u = await checkForUpdate();
+                            setMsg(u ? `Version ${u.version} is available` : `Version ${VERSION} is the newest`);
+                        } catch (e: any) {
+                            setMsg(`Couldn't check: ${e?.message ?? e}`);
+                        }
+                    }}
+                >
+                    Check for updates
+                </ButtonItem>
+            </PanelSectionRow>
         </PanelSection>
     );
 };
@@ -151,6 +202,8 @@ export const Settings = () => {
 
     if (!open) {
         return (
+            <>
+            <UpdateBanner />
             <PanelSection>
                 <PanelSectionRow>
                     <ButtonItem layout="below" onClick={() => setState({ viewMode: ViewMode.Picture, visible: true })}>
@@ -164,14 +217,16 @@ export const Settings = () => {
                     </ButtonItem>
                 </PanelSectionRow>
             </PanelSection>
+            <VersionRow />
+            </>
         );
     }
 
-    const sizeIndex = nearestIndex(SIZES, s.size);
-    const marginIndex = nearestIndex(MARGINS, s.margin);
+        const marginIndex = nearestIndex(MARGINS, s.margin);
 
     return (
         <>
+            <UpdateBanner />
             <PanelSection>
                 <PanelSectionRow>
                     <ButtonItem layout="below" onClick={showRemote}>
@@ -216,14 +271,15 @@ export const Settings = () => {
                     <PanelSectionRow>
                         <SliderField
                             label="Size"
-                            value={sizeIndex}
-                            min={0}
-                            max={SIZES.length - 1}
+                            description="Width of the picture as a share of the screen"
+                            value={Math.round(s.size * 100)}
+                            min={10}
+                            max={80}
                             step={1}
-                            notchCount={SIZES.length}
-                            notchTicksVisible
-                            notchLabels={SIZES.map((x, i) => ({ label: x.label, notchIndex: i, value: i }))}
-                            onChange={(i: number) => setState({ size: SIZES[i].value })}
+                            showValue
+                            valueSuffix="%"
+                            resetValue={28}
+                            onChange={(v: number) => setState({ size: v / 100 })}
                         />
                     </PanelSectionRow>
                     <PanelSectionRow>
@@ -237,6 +293,32 @@ export const Settings = () => {
                             notchTicksVisible
                             notchLabels={MARGINS.map((x, i) => ({ label: x.label, notchIndex: i, value: i }))}
                             onChange={(i: number) => setState({ margin: MARGINS[i].value })}
+                        />
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                        <SliderField
+                            label="Fine tune: left / right"
+                            value={Math.round((s.nudgeX ?? 0) * 100)}
+                            min={-30}
+                            max={30}
+                            step={1}
+                            showValue
+                            valueSuffix="%"
+                            resetValue={0}
+                            onChange={(v: number) => setState({ nudgeX: v / 100 })}
+                        />
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                        <SliderField
+                            label="Fine tune: up / down"
+                            value={Math.round((s.nudgeY ?? 0) * 100)}
+                            min={-30}
+                            max={30}
+                            step={1}
+                            showValue
+                            valueSuffix="%"
+                            resetValue={0}
+                            onChange={(v: number) => setState({ nudgeY: v / 100 })}
                         />
                     </PanelSectionRow>
                 </PanelSection>
@@ -264,6 +346,7 @@ export const Settings = () => {
             </PanelSection>
 
             {s.showDiagnostics && <Diagnostics />}
+            <VersionRow />
         </>
     );
 };

@@ -156,6 +156,11 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number; keyboar
         case Position.TopLeft: break;
         case Position.Center: x = centerX; y = centerY; break;
     }
+    // Fine tuning, kept inside the free space.
+    x += (s.nudgeX ?? 0) * screen.width;
+    y += (s.nudgeY ?? 0) * screen.height;
+    x = Math.min(Math.max(x, box.x), box.x + box.width - width);
+    y = Math.min(Math.max(y, box.y), box.y + box.height - height);
     return { x: Math.round(x), y: Math.round(y), width, height };
 };
 

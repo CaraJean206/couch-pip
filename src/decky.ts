@@ -17,5 +17,6 @@ export const callable = <Args extends any[] = any[], Ret = any>(method: string) 
 
 export const routerHook = api.routerHook;
 export const toaster = api.toaster;
+export const fetchNoCors: ((url: string, init?: any) => Promise<Response>) | undefined = api.fetchNoCors;
 
 export const definePlugin = <T,>(fn: () => T) => () => fn();

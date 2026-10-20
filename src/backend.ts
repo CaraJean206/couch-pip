@@ -17,6 +17,7 @@ export const media = callable<[action: string, amount: number], Result<any>>("me
 export const back = callable<[], Result<string>>("back");
 export const reload = callable<[], Result>("reload");
 export const setOptions = callable<[autofill: boolean], Result>("set_options");
+export const fillStatus = callable<[], Result<any>>("fill_status");
 export const pointer = callable<[dx: number, dy: number, wheel: number, click: boolean], Result<string>>("pointer");
 
 /** Connect to the PiP page, retrying while it loads. */

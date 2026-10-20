@@ -7,6 +7,9 @@
 // If you have the normal toolchain, `pnpm i && pnpm build` with
 // @decky/rollup works too.
 import { build } from "esbuild";
+import { readFileSync } from "fs";
+
+const { version } = JSON.parse(readFileSync("package.json", "utf8"));
 
 const globals = {
     react: "SP_REACT",
@@ -39,6 +42,6 @@ await build({
     legalComments: "none",
     nodePaths: (process.env.NODE_PATH || "").split(":").filter(Boolean),
     plugins: [deckyGlobals],
-    define: { "process.env.NODE_ENV": '"production"' },
+    define: { "process.env.NODE_ENV": '"production"', __VERSION__: JSON.stringify(version) },
     logLevel: "info",
 });

@@ -22,15 +22,20 @@ Squires. What's new in this fork:
   same). Press Menu in the remote to switch back to the full page.
 - **Trackpads.** In the remote, the right trackpad (or right stick) is a mouse,
   clicking the right trackpad clicks, and the left trackpad scrolls.
-- **Nine positions:** corners, middle of each side, and center.
+- **Nine positions:** corners, middle of each side, and center, plus fine-tune
+  sliders to nudge it, and a size slider from 10% to 80% of the screen.
+- **Updates itself.** Checks GitHub for a new version, shows a notification,
+  and installs it with one press through Decky's normal install prompt.
 
 ## Install (developer mode)
 
 1. If the original "Picture in Picture" plugin is installed, uninstall it first.
 2. In Decky's settings, turn on **Developer mode**.
-3. In the new **Developer** tab, choose **Install plugin from ZIP file** and
-   pick `couch-pip.zip`. (Or unzip it into `~/homebrew/plugins/` and restart
-   Decky.)
+3. In the new **Developer** tab, choose **Install plugin from URL** and enter
+   `https://raw.githubusercontent.com/CaraJean206/couch-pip/main/couch-pip.zip`
+
+After that, updates show up as a notification and an **Update** button at the
+top of the plugin's panel (or press **Check for updates** at the bottom).
 
 ## Using it
 
@@ -75,6 +80,9 @@ the controller goes back to the game.
   may not play, or may play at lower quality.
 - If the picture is the wrong size or in the wrong place, turn on
   **Show diagnostics** and try **Use device pixels**.
+- If a video doesn't fill the window properly on some site, turn off
+  **Fill window when a video plays**; **Check video fill** in diagnostics shows
+  what the plugin saw.
 
 ## Building
 
@@ -85,8 +93,8 @@ pnpm i
 pnpm build        # writes dist/index.js
 ```
 
-Then copy `plugin.json`, `package.json`, `main.py`, `dist/` and `LICENSE` into
-`~/homebrew/plugins/couch-pip/` on the device.
+Releases: see the steps at the top of `package.py` (it builds `couch-pip.zip`
+and writes `version.json`, which the update check reads).
 
 ## License
 

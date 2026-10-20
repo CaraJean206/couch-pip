@@ -374,6 +374,9 @@ JS_HELPER = r"""
     video.__cpip_fill, .__cpip_fill video { width: 100% !important; height: 100% !important; left: 0 !important;
       top: 0 !important; object-fit: contain !important; }
     .__cpip_hide { visibility: hidden !important; }
+    .__cpip_anc { transform: none !important; filter: none !important; perspective: none !important;
+      contain: none !important; will-change: auto !important; backdrop-filter: none !important;
+      container-type: normal !important; content-visibility: visible !important; }
     html.__cpip_filled, html.__cpip_filled body { overflow: hidden !important; }
     #__cpip_cursor { position: fixed; left: 0; top: 0; width: 22px; height: 22px; z-index: 2147483647;
       pointer-events: none; transition: opacity .3s; opacity: 0; filter: drop-shadow(0 1px 2px rgba(0,0,0,.8)); }
@@ -388,7 +391,7 @@ JS_HELPER = r"""
   if (document.documentElement) addStyle();
   document.addEventListener('DOMContentLoaded', addStyle);
 
-  const state = { el: null, video: null, hidden: [], dismissed: null };
+  const state = { el: null, video: null, hidden: [], ancestors: [], dismissed: null, failed: new WeakSet(), last: '' };
 
   // The player box: the outermost ancestor that is the same size as the video,
   // so controls and subtitles come along.
@@ -411,20 +414,37 @@ JS_HELPER = r"""
     if (state.el) state.el.classList.remove('__cpip_fill');
     state.hidden.forEach((e) => e.classList.remove('__cpip_hide'));
     state.hidden = [];
+    state.ancestors.forEach((e) => e.classList.remove('__cpip_anc'));
+    state.ancestors = [];
     state.el = null;
     state.video = null;
     document.documentElement.classList.remove('__cpip_filled');
   };
 
-  const fill = (el, video) => {
-    if (!el) return;
-    unfill();
+  // Is the filled player really covering the window, with its video on screen?
+  const coversWindow = (el, video) => {
+    const r = el.getBoundingClientRect();
+    const okBox = Math.abs(r.left) < 4 && Math.abs(r.top) < 4 &&
+      Math.abs(r.width - innerWidth) < 8 && Math.abs(r.height - innerHeight) < 8;
+    if (!okBox || !video) return okBox;
+    const v = video.getBoundingClientRect();
+    const visible = v.width > 40 && v.height > 40 && v.right > 0 && v.bottom > 0 &&
+      v.left < innerWidth && v.top < innerHeight && getComputedStyle(video).visibility === 'visible';
+    return visible;
+  };
+
+  const applyFill = (el, video) => {
     addStyle();
     el.classList.add('__cpip_fill');
-    // Hide everything that isn't the player or one of its ancestors.
     for (let node = el; node && node !== document.documentElement; node = node.parentElement) {
       const parent = node.parentElement;
       if (!parent) break;
+      // Ancestors must not pin "fixed" to themselves (transform, filter, contain...).
+      if (parent !== document.documentElement && parent !== document.body) {
+        parent.classList.add('__cpip_anc');
+        state.ancestors.push(parent);
+      }
+      // Hide everything that isn't the player or one of its ancestors.
       for (const sib of parent.children) {
         if (sib !== node && !sib.classList.contains('__cpip_hide') && sib.tagName !== 'STYLE' && sib.tagName !== 'SCRIPT') {
           sib.classList.add('__cpip_hide');
@@ -437,6 +457,38 @@ JS_HELPER = r"""
     document.documentElement.classList.add('__cpip_filled');
   };
 
+  // Fill the window with the player; if that doesn't work on this site, try
+  // the bare video, and if that fails too, put the page back as it was rather
+  // than leave a black window.
+  const fill = (el, video) => {
+    if (!el) return false;
+    unfill();
+    applyFill(el, video);
+    if (coversWindow(el, state.video)) { state.last = 'filled player'; return true; }
+    const v = state.video;
+    if (v && el !== v) {
+      unfill();
+      applyFill(v, v);
+      if (coversWindow(v, v)) { state.last = 'filled video only'; return true; }
+    }
+    unfill();
+    if (v) state.failed.add(v);
+    state.last = 'fill failed, page left as is';
+    return false;
+  };
+
+  const status = () => {
+    const vids = [...document.querySelectorAll('video')].map((v) => {
+      const r = v.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height), x: Math.round(r.left), y: Math.round(r.top),
+        paused: v.paused, muted: v.muted, duration: v.duration, ready: v.readyState };
+    });
+    const f = state.el && state.el.getBoundingClientRect();
+    return { filled: !!state.el, fillTag: state.el ? state.el.tagName.toLowerCase() + (state.el.id ? '#' + state.el.id : '') : null,
+      fillRect: f ? [f.left, f.top, f.width, f.height].map(Math.round) : null, window: [innerWidth, innerHeight],
+      last: state.last, autofill: window.__cpip.opts.autofill, videos: vids };
+  };
+
   const toggleFill = (v) => {
     if (state.el) {
       const dv = state.video;
@@ -447,8 +499,7 @@ JS_HELPER = r"""
     v = v || largestVideo();
     if (!v) return 'No video on this page';
     state.dismissed = null;
-    fill(playerFor(v), v);
-    return 'Filling window';
+    return fill(playerFor(v), v) ? 'Filling window' : "Couldn't fill on this site";
   };
 
   // Sites' fullscreen buttons: fill the PiP window instead of the real screen.
@@ -501,7 +552,8 @@ JS_HELPER = r"""
       fsEl = null;
     }
     if (!window.__cpip.opts.autofill || state.el) return;
-    const v = [...document.querySelectorAll('video')].find(isRealPlayback);
+    const v = [...document.querySelectorAll('video')].filter((x) => isRealPlayback(x) && !state.failed.has(x))
+      .sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
     const d = state.dismissed;
     if (v && !(d && d.video === v && d.src === (v.currentSrc || v.src))) fill(playerFor(v), v);
   }, 1000);
@@ -529,7 +581,7 @@ JS_HELPER = r"""
     return { x: cursor.x, y: cursor.y, h: innerHeight };
   };
 
-  window.__cpip = { opts: OPTS, fill, unfill, toggleFill, pointer, playerFor, state };
+  window.__cpip = { opts: OPTS, fill, unfill, toggleFill, pointer, playerFor, state, status };
   return 'installed';
 })()
 """
@@ -788,3 +840,7 @@ class Plugin:
             return ""
 
         return await self._safe(run())
+
+    async def fill_status(self):
+        """What the page helper sees, for the diagnostics panel."""
+        return await self._safe(self._eval("window.__cpip ? window.__cpip.status() : null"))
