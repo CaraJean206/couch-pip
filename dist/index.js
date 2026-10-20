@@ -685,49 +685,105 @@ var PAD_RANGE = 65536;
 var PAD_SPEED = 0.9;
 var SCROLL_SPEED = 2;
 var ASPECT_FIX = 16 / 9;
+var padStats = {
+  state: 0,
+  // controller state packets from Steam
+  stateWithPads: 0,
+  // packets with trackpad movement or touch
+  last: "",
+  wheel: 0,
+  // DOM scroll-wheel events
+  mouse: 0,
+  // DOM mouse movement events
+  clicks: 0,
+  buttons: [],
+  // recent button codes we didn't otherwise use
+  sent: 0,
+  // pointer commands sent to the page
+  error: ""
+};
 var usePadMouse = () => {
   (0, import_react6.useEffect)(() => {
-    const input = window.SteamClient?.Input;
-    if (!input?.RegisterForControllerStateChanges) return;
     const acc = { dx: 0, dy: 0, wheel: 0, click: false };
     let right = null;
     let left = null;
     let rightClickDown = false;
     let stick = { x: 0, y: 0 };
     let inflight = false;
-    const reg = input.RegisterForControllerStateChanges((changes) => {
-      for (const c of changes) {
-        const b = c.ulButtons;
-        const rTouch = bit(b, 20) || c.sRightPadX !== 0 || c.sRightPadY !== 0;
-        const lTouch = bit(b, 19) || c.sLeftPadX !== 0 || c.sLeftPadY !== 0;
-        if (rTouch) {
-          if (right) {
-            const dx = (c.sRightPadX - right.x) / PAD_RANGE;
-            const dy = (c.sRightPadY - right.y) / PAD_RANGE;
-            if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) {
-              acc.dx += dx * PAD_SPEED;
-              acc.dy -= dy * PAD_SPEED * ASPECT_FIX;
+    const cleanups = [];
+    const input = window.SteamClient?.Input;
+    if (input?.RegisterForControllerStateChanges) {
+      const reg = input.RegisterForControllerStateChanges((changes) => {
+        for (const c of changes) {
+          padStats.state++;
+          const b = c.ulButtons;
+          const rx = c.sRightPadX ?? 0, ry = c.sRightPadY ?? 0;
+          const lx = c.sLeftPadX ?? 0, ly = c.sLeftPadY ?? 0;
+          const rTouch = bit(b, 20) || rx !== 0 || ry !== 0;
+          const lTouch = bit(b, 19) || lx !== 0 || ly !== 0;
+          if (rTouch || lTouch) {
+            padStats.stateWithPads++;
+            padStats.last = `R ${rx},${ry} L ${lx},${ly} btn ${Number(b).toString(16)}`;
+          }
+          if (rTouch) {
+            if (right) {
+              const dx = (rx - right.x) / PAD_RANGE;
+              const dy = (ry - right.y) / PAD_RANGE;
+              if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) {
+                acc.dx += dx * PAD_SPEED;
+                acc.dy -= dy * PAD_SPEED * ASPECT_FIX;
+              }
             }
+            right = { x: rx, y: ry };
+          } else {
+            right = null;
           }
-          right = { x: c.sRightPadX, y: c.sRightPadY };
-        } else {
-          right = null;
-        }
-        if (lTouch) {
-          if (left) {
-            const dy = (c.sLeftPadY - left.y) / PAD_RANGE;
-            if (Math.abs(dy) < 0.25) acc.wheel -= dy * SCROLL_SPEED;
+          if (lTouch) {
+            if (left) {
+              const dy = (ly - left.y) / PAD_RANGE;
+              if (Math.abs(dy) < 0.25) acc.wheel -= dy * SCROLL_SPEED;
+            }
+            left = { x: lx, y: ly };
+          } else {
+            left = null;
           }
-          left = { x: c.sLeftPadX, y: c.sLeftPadY };
-        } else {
-          left = null;
+          const click2 = bit(b, 18);
+          if (click2 && !rightClickDown) acc.click = true;
+          rightClickDown = click2;
+          stick = { x: (c.sRightStickX ?? 0) / 32767, y: (c.sRightStickY ?? 0) / 32767 };
         }
-        const click2 = bit(b, 18);
-        if (click2 && !rightClickDown) acc.click = true;
-        rightClickDown = click2;
-        stick = { x: (c.sRightStickX ?? 0) / 32767, y: (c.sRightStickY ?? 0) / 32767 };
-      }
-    });
+      });
+      cleanups.push(() => reg?.unregister?.());
+    } else {
+      padStats.error = "Steam controller-state API not found";
+    }
+    const win = getMainWindow();
+    if (win) {
+      const onWheel = (e) => {
+        padStats.wheel++;
+        const px = e.deltaMode === 1 ? e.deltaY * 40 : e.deltaMode === 2 ? e.deltaY * win.innerHeight : e.deltaY;
+        acc.wheel += px / win.innerHeight;
+      };
+      const onMove = (e) => {
+        if (!e.movementX && !e.movementY) return;
+        padStats.mouse++;
+        acc.dx += e.movementX / win.innerWidth;
+        acc.dy += e.movementY / win.innerHeight;
+      };
+      const onDown = (e) => {
+        if (e.button !== 0) return;
+        padStats.clicks++;
+        acc.click = true;
+      };
+      win.addEventListener("wheel", onWheel, { passive: true, capture: true });
+      win.addEventListener("mousemove", onMove, { capture: true });
+      win.addEventListener("mousedown", onDown, { capture: true });
+      cleanups.push(() => {
+        win.removeEventListener("wheel", onWheel, { capture: true });
+        win.removeEventListener("mousemove", onMove, { capture: true });
+        win.removeEventListener("mousedown", onDown, { capture: true });
+      });
+    }
     const timer = setInterval(() => {
       const mag = Math.hypot(stick.x, stick.y);
       const deadzone = 0.2;
@@ -743,15 +799,45 @@ var usePadMouse = () => {
       acc.dx = acc.dy = acc.wheel = 0;
       acc.click = false;
       inflight = true;
-      pointer(send.dx, send.dy, scrolled ? send.wheel : 0, send.click).catch(() => void 0).finally(() => {
+      padStats.sent++;
+      pointer(send.dx, send.dy, scrolled ? send.wheel : 0, send.click).then((r) => {
+        padStats.error = r.ok ? "" : r.error ?? "";
+      }).catch((e) => {
+        padStats.error = String(e);
+      }).finally(() => {
         inflight = false;
       });
     }, 33);
-    return () => {
-      clearInterval(timer);
-      reg?.unregister?.();
-    };
+    cleanups.push(() => clearInterval(timer));
+    return () => cleanups.forEach((f) => f());
   }, []);
+};
+var clickAtCursor = () => pointer(0, 0, 0, true);
+var PadReadout = () => {
+  const [, tick] = (0, import_react6.useState)(0);
+  (0, import_react6.useEffect)(() => {
+    const t = setInterval(() => tick((n) => n + 1), 500);
+    return () => clearInterval(t);
+  }, []);
+  const p = padStats;
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: { fontSize: 11, opacity: 0.55, marginTop: 8, fontFamily: "monospace" }, children: [
+    "pads: state ",
+    p.state,
+    " (touch ",
+    p.stateWithPads,
+    ") \xB7 wheel ",
+    p.wheel,
+    " \xB7 mouse ",
+    p.mouse,
+    " \xB7 clicks ",
+    p.clicks,
+    " \xB7 sent",
+    " ",
+    p.sent,
+    p.buttons.length ? ` \xB7 buttons ${p.buttons.join(",")}` : "",
+    p.last ? ` \xB7 ${p.last}` : "",
+    p.error ? ` \xB7 ${p.error}` : ""
+  ] });
 };
 var RemoteModal = ({ closeModal }) => {
   const [status, setStatus] = (0, import_react6.useState)("Connecting to the page\u2026");
@@ -826,7 +912,12 @@ var RemoteModal = ({ closeModal }) => {
       case import_ui4.GamepadButton.START:
         run(() => media("fill", 0));
         break;
+      case 22:
+        padStats.clicks++;
+        clickAtCursor();
+        break;
       default:
+        padStats.buttons = [...padStats.buttons.slice(-5), e.detail.button];
         return;
     }
   };
@@ -851,7 +942,8 @@ var RemoteModal = ({ closeModal }) => {
           /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("b", { children: button }),
           " ",
           action
-        ] }, button)) })
+        ] }, button)) }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PadReadout, {})
       ]
     }
   ) });
@@ -859,7 +951,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.3.2" : "0.0.0";
+var VERSION = true ? "0.3.3" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);

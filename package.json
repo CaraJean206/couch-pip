@@ -1,6 +1,6 @@
 {
   "name": "couch-pip",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Picture-in-picture video over games on SteamOS, sized for TVs, with a controller remote",
   "type": "module",
   "scripts": {
