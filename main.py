@@ -555,19 +555,47 @@ JS_HELPER = r"""
   }, true);
 
   // Auto-fill when a real video plays; undo when it goes away or ends.
+  // Wait until it has played steadily for a few seconds, so the site has
+  // finished setting up its player first (filling too early can leave
+  // Steam's view showing a blank picture).
   const isRealPlayback = (v) => !v.paused && !v.muted && v.readyState > 2 &&
     (v.duration > 90 || v.duration === Infinity) && v.getBoundingClientRect().width > 80;
+  const SETTLE_SECONDS = 3;
+  let watch = null; // { video, src, start }
   setInterval(() => {
     if (state.el && (!state.el.isConnected || (state.video && (!state.video.isConnected || state.video.ended)))) {
       unfill();
       fsEl = null;
     }
-    if (!window.__cpip.opts.autofill || state.el) return;
+    if (!window.__cpip.opts.autofill || state.el) { watch = null; return; }
     const v = [...document.querySelectorAll('video')].filter((x) => isRealPlayback(x) && !state.failed.has(x))
       .sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
     const d = state.dismissed;
-    if (v && !(d && d.video === v && d.src === (v.currentSrc || v.src))) fill(playerFor(v), v);
+    if (!v || (d && d.video === v && d.src === (v.currentSrc || v.src))) { watch = null; return; }
+    const src = v.currentSrc || v.src;
+    if (!watch || watch.video !== v || watch.src !== src) {
+      watch = { video: v, src, start: v.currentTime };
+      return;
+    }
+    if (v.currentTime - watch.start >= SETTLE_SECONDS) {
+      watch = null;
+      fill(playerFor(v), v);
+    }
   }, 1000);
+
+  // When the picture changes size (remote opened or closed, size slider),
+  // redo the fill so Steam's view draws it fresh at the new size.
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (!state.el) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (!state.el) return;
+      const el = state.el, v = state.video;
+      unfill();
+      requestAnimationFrame(() => requestAnimationFrame(() => fill(el, v)));
+    }, 400);
+  });
 
   // Trackpad cursor.
   const cursor = { x: innerWidth / 2, y: innerHeight / 2, el: null, timer: null };
