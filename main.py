@@ -31,6 +31,8 @@ except ImportError:  # local testing outside Decky
     log = logging.getLogger("couch-pip")
 
 CDP_HOST = "127.0.0.1"
+MAX_HTTP_BODY = 8 * 1024 * 1024  # /json is a few KB
+MAX_WS_MESSAGE = 64 * 1024 * 1024  # page snapshots are the largest messages
 CDP_PORT = int(os.environ.get("COUCH_PIP_CDP_PORT", "8080"))
 
 # Pages that belong to Steam itself and must never be driven by the remote.
@@ -67,9 +69,11 @@ async def http_get_json(path: str, timeout: float = 3.0):
             if line.lower().startswith(b"content-length:"):
                 length = int(line.split(b":", 1)[1].strip())
         if length is not None:
+            if length > MAX_HTTP_BODY:
+                raise ValueError("response too large")
             body = await asyncio.wait_for(reader.readexactly(length), timeout)
         else:
-            body = await asyncio.wait_for(reader.read(), timeout)
+            body = await asyncio.wait_for(reader.read(MAX_HTTP_BODY), timeout)
             if b"chunked" in head.lower():
                 body = _dechunk(body)
     finally:
@@ -145,6 +149,8 @@ class WebSocket:
             elif n == 127:
                 (n,) = struct.unpack("!Q", await self.reader.readexactly(8))
             mask = await self.reader.readexactly(4) if b2 & 0x80 else None
+            if n + len(message) > MAX_WS_MESSAGE:
+                raise ConnectionError("message too large")
             data = await self.reader.readexactly(n)
             if mask:
                 data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
@@ -667,8 +673,18 @@ def _host(url: str) -> str:
     return h
 
 
+# Steam's own sites carry your Steam login; the remote must never touch them.
+STEAM_DOMAINS = ("steampowered.com", "steamcommunity.com", "steam-chat.com", "steamstatic.com",
+                 "steamusercontent.com", "steamloopback.host", "s.team", "valvesoftware.com")
+
+
 def _is_steam_page(url: str) -> bool:
-    return url.startswith(STEAM_URL_PREFIXES) or "steampowered.com" in url
+    if url.startswith(STEAM_URL_PREFIXES):
+        return True
+    if not url.startswith(("http://", "https://")):
+        return True  # only ever drive normal web pages
+    host = (urlparse(url).hostname or "").lower()
+    return any(host == d or host.endswith("." + d) for d in STEAM_DOMAINS)
 
 
 class Plugin:
@@ -748,7 +764,7 @@ class Plugin:
         except Exception as e:
             self.session = None
             return {"ok": False, "error": f"Couldn't connect to page: {e}"}
-        log.info(f"attached to {t.get('url')} ({t['id']})")
+        log.info(f"attached to {urlparse(t.get('url', '')).hostname or '?'}")
         if not self.opts.get("safe"):
             await self._install_helper()
         return {"ok": True, "id": t["id"], "url": t.get("url"), "title": t.get("title")}
@@ -1057,6 +1073,8 @@ class PadReader:
         self.right = None
         self.left = None
         self.stick = (0.0, 0.0)
+        self.useful: set[int] = set()
+        self.prune = None
 
     def start(self, sys_root="/sys/class/hidraw", dev_root="/dev", paths=None):
         self.stop()
@@ -1074,7 +1092,25 @@ class PadReader:
         self.stats["devices"] = len(self.fds)
         if not self.fds and not self.stats["error"]:
             self.stats["error"] = "no Valve controller found"
+        self.useful: set[int] = set()
         self.task = asyncio.ensure_future(self._send_loop())
+        self.prune = asyncio.ensure_future(self._close_unused(3.0))
+
+    async def _close_unused(self, delay: float):
+        """Stop reading any receiver interface that isn't sending trackpad data."""
+        try:
+            await asyncio.sleep(delay)
+            loop = asyncio.get_event_loop()
+            for fd in [f for f in self.fds if f not in self.useful]:
+                try:
+                    loop.remove_reader(fd)
+                    os.close(fd)
+                except Exception:
+                    pass
+                self.fds.remove(fd)
+            self.stats["devices"] = len(self.fds)
+        except asyncio.CancelledError:
+            pass
 
     def stop(self):
         loop = asyncio.get_event_loop()
@@ -1088,9 +1124,10 @@ class PadReader:
             except Exception:
                 pass
         self.fds = []
-        if self.task:
-            self.task.cancel()
-            self.task = None
+        for t in ("task", "prune"):
+            if getattr(self, t, None):
+                getattr(self, t).cancel()
+                setattr(self, t, None)
         self.right = self.left = None
 
     def _on_readable(self, fd):
@@ -1108,12 +1145,13 @@ class PadReader:
                 return
             if not data:
                 return
-            self.handle(data)
+            if self.handle(data):
+                self.useful.add(fd)
 
     def handle(self, data: bytes):
         parsed = parse_triton_report(data)
         if not parsed:
-            return
+            return False  # anything that isn't a controller state report is ignored
         self.stats["reports"] += 1
         buttons, lpx, lpy, rpx, rpy, rsx, rsy = parsed
         if buttons & T_RIGHT_PAD_TOUCH:
@@ -1137,6 +1175,7 @@ class PadReader:
         else:
             self.left = None
         self.stick = (rsx / 32767, rsy / 32767)
+        return True
 
     async def _send_loop(self):
         try:

@@ -61,6 +61,8 @@ export const getScreen = () => {
     return { ...FALLBACK, detected: false };
 };
 
+export const isWebUrl = (url: string) => /^https?:\/\/[^\s]+$/i.test(url);
+
 export const hostOf = (url: string) => {
     try {
         return new URL(url).hostname.replace(/^www\./, "");
@@ -69,10 +71,14 @@ export const hostOf = (url: string) => {
     }
 };
 
+/** Turn what was typed into a web address. Only http and https are allowed. */
 export const normalizeUrl = (input: string) => {
     const t = input.trim();
     if (!t) return t;
-    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return t;
+    if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(t)) {
+        // Has a scheme (not just "host:port"): keep only http/https.
+        return /^https?:\/\//i.test(t) ? t : "";
+    }
     // Bare IPs and local names (a home Jellyfin server) are usually plain http.
     if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/|$)/.test(t) || /^[^./]+(:\d+)(\/|$)/.test(t) || /\.local(:\d+)?(\/|$)/.test(t)) {
         return "http://" + t;

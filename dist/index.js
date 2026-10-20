@@ -226,6 +226,7 @@ var getScreen = () => {
   }
   return { ...FALLBACK, detected: false };
 };
+var isWebUrl = (url) => /^https?:\/\/[^\s]+$/i.test(url);
 var hostOf = (url) => {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
@@ -236,7 +237,9 @@ var hostOf = (url) => {
 var normalizeUrl = (input) => {
   const t = input.trim();
   if (!t) return t;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return t;
+  if (/^[a-z][a-z0-9+.-]*:(?!\d)/i.test(t)) {
+    return /^https?:\/\//i.test(t) ? t : "";
+  }
   if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/|$)/.test(t) || /^[^./]+(:\d+)(\/|$)/.test(t) || /\.local(:\d+)?(\/|$)/.test(t)) {
     return "http://" + t;
   }
@@ -318,7 +321,12 @@ var defaults = {
 var load = () => {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-    return { ...defaults, ...saved };
+    const state2 = { ...defaults, ...saved };
+    if (!/^https?:\/\//i.test(state2.url)) state2.url = defaults.url;
+    state2.bookmarks = (Array.isArray(state2.bookmarks) ? state2.bookmarks : []).filter(
+      (b) => b && typeof b.name === "string" && /^https?:\/\//i.test(b.url)
+    );
+    return state2;
   } catch {
     return { ...defaults };
   }
@@ -533,8 +541,10 @@ var BUILT_IN = [
   { name: "Prime Video", url: "https://www.primevideo.com" }
 ];
 var openUrl = (url) => {
+  const full = normalizeUrl(url);
+  if (!isWebUrl(full)) return;
   setState((s) => ({
-    url: normalizeUrl(url),
+    url: full,
     viewMode: s.viewMode === 3 /* Closed */ ? 2 /* Picture */ : s.viewMode,
     visible: true
   }));
@@ -550,8 +560,8 @@ var AddressModal = ({ closeModal, title, withName }) => {
       strTitle: title,
       strOKButtonText: withName ? "Save and open" : "Open",
       onOK: () => {
-        if (!url.trim()) return;
         const full = normalizeUrl(url);
+        if (!isWebUrl(full)) return;
         if (withName) {
           const bm = { name: name.trim() || hostOf(full), url: full };
           setState((s) => ({ bookmarks: [...s.bookmarks.filter((b) => b.url !== full), bm] }));
@@ -1069,7 +1079,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.1" : "0.0.0";
+var VERSION = true ? "0.4.2" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1092,16 +1102,19 @@ var getJson = async (url) => {
   }
   throw new Error("Couldn't reach GitHub");
 };
+var ZIP_PATTERN = /^https:\/\/raw\.githubusercontent\.com\/CaraJean206\/couch-pip\/[0-9a-f]{40}\/couch-pip\.zip$/;
+var isValidUpdate = (info) => !!info && typeof info.version === "string" && /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(info.version) && typeof info.zip === "string" && ZIP_PATTERN.test(info.zip) && typeof info.sha256 === "string" && /^[0-9a-f]{64}$/.test(info.sha256);
 var checkForUpdate = async () => {
   const info = await getJson(`${VERSION_URL}?t=${Date.now()}`);
-  if (!info?.version || !info?.zip) throw new Error("version.json is incomplete");
+  if (!isValidUpdate(info)) throw new Error("version.json failed validation");
   const update = isNewer(info.version, VERSION) ? info : null;
   setState({ update });
   return update;
 };
 var installUpdate = (u) => {
   const backend = window.DeckyBackend;
-  return backend.call("utilities/install_plugin", u.zip, PLUGIN_NAME, u.version, u.sha256 ?? "", 2);
+  if (!isValidUpdate(u)) return Promise.reject(new Error("invalid update"));
+  return backend.call("utilities/install_plugin", u.zip, PLUGIN_NAME, u.version, u.sha256, 2);
 };
 var startUpdateChecks = () => {
   let notified = "";

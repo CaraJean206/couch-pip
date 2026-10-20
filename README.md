@@ -105,6 +105,14 @@ Turn on **Show diagnostics** at the bottom of the panel for these tools:
   controllers use Steam's own input, which may not report trackpad movement on
   newer Steam builds.
 
+## Security
+
+Couch PiP runs as your normal user (no root), uses only Python's standard
+library, never runs downloaded code, and only accepts updates from this
+repository pinned to an exact commit with a checked fingerprint. The build is
+reproducible and checked automatically. See [SECURITY.md](SECURITY.md) for
+exactly what it accesses and how to verify it.
+
 ## Responsible use
 
 Couch PiP is a browser window. It doesn't download videos, bypass DRM, block
@@ -123,6 +131,9 @@ ads or get around paywalls. Use streaming services under their own terms.
   HID reports while the remote is open, using the report layout documented in
   SDL (`main.py`, `PadReader`).
 - No root access and no extra Python packages are needed.
+- Couch PiP isn't in the Decky plugin store: the store doesn't accept
+  AI-written code, and this plugin was written with Claude. It installs through
+  Decky's developer mode instead.
 
 More detail is in [How it was made](docs/how-it-was-made.md), and every
 version is described in the [Changelog](CHANGELOG.md).

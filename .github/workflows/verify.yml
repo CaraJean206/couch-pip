@@ -1,0 +1,40 @@
+name: Verify build
+
+# Rebuilds the plugin from source and fails if the published files
+# (dist/index.js and couch-pip.zip) don't match byte for byte.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install the exact build tools
+        run: npm install --no-save --no-package-lock esbuild@0.28.2 react-icons@5.7.0
+
+      - name: Backend compiles
+        run: python3 -m py_compile main.py
+
+      - name: Rebuild frontend and compare
+        run: |
+          cp dist/index.js /tmp/published-index.js
+          node build.mjs
+          cmp dist/index.js /tmp/published-index.js
+
+      - name: Repackage and compare
+        run: |
+          cp couch-pip.zip /tmp/published.zip
+          python3 package.py
+          cmp couch-pip.zip /tmp/published.zip
+          sha256sum couch-pip.zip

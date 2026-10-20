@@ -2,7 +2,7 @@ import { ConfirmModal, DialogButton, Focusable, ModalRoot, TextField, showModal 
 import { useEffect, useState } from "react";
 
 import { Bookmark, getState, setState, useStore } from "./store";
-import { ViewMode, hostOf, normalizeUrl } from "./util";
+import { ViewMode, hostOf, isWebUrl, normalizeUrl } from "./util";
 
 /** Steam's browser view draws above modals, so hide it while one is open. */
 export const useHidePip = () => {
@@ -22,8 +22,10 @@ export const BUILT_IN: Bookmark[] = [
 ];
 
 export const openUrl = (url: string) => {
+    const full = normalizeUrl(url);
+    if (!isWebUrl(full)) return; // only normal web pages
     setState((s) => ({
-        url: normalizeUrl(url),
+        url: full,
         viewMode: s.viewMode === ViewMode.Closed ? ViewMode.Picture : s.viewMode,
         visible: true,
     }));
@@ -39,8 +41,8 @@ const AddressModal = ({ closeModal, title, withName }: { closeModal?: () => void
             strTitle={title}
             strOKButtonText={withName ? "Save and open" : "Open"}
             onOK={() => {
-                if (!url.trim()) return;
                 const full = normalizeUrl(url);
+                if (!isWebUrl(full)) return;
                 if (withName) {
                     const bm = { name: name.trim() || hostOf(full), url: full };
                     setState((s) => ({ bookmarks: [...s.bookmarks.filter((b) => b.url !== full), bm] }));

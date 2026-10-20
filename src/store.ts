@@ -50,7 +50,13 @@ const defaults: State = {
 const load = (): State => {
     try {
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-        return { ...defaults, ...saved };
+        const state = { ...defaults, ...saved };
+        // Only ever restore normal web addresses.
+        if (!/^https?:\/\//i.test(state.url)) state.url = defaults.url;
+        state.bookmarks = (Array.isArray(state.bookmarks) ? state.bookmarks : []).filter(
+            (b: any) => b && typeof b.name === "string" && /^https?:\/\//i.test(b.url),
+        );
+        return state;
     } catch {
         return { ...defaults };
     }

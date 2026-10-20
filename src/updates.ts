@@ -43,9 +43,22 @@ const getJson = async (url: string) => {
     throw new Error("Couldn't reach GitHub");
 };
 
+// Updates may only come from this repository, pinned to an exact commit,
+// with a SHA-256 that Decky checks before installing.
+const ZIP_PATTERN = /^https:\/\/raw\.githubusercontent\.com\/CaraJean206\/couch-pip\/[0-9a-f]{40}\/couch-pip\.zip$/;
+
+export const isValidUpdate = (info: any): info is UpdateInfo =>
+    !!info &&
+    typeof info.version === "string" &&
+    /^\d{1,4}\.\d{1,4}\.\d{1,4}$/.test(info.version) &&
+    typeof info.zip === "string" &&
+    ZIP_PATTERN.test(info.zip) &&
+    typeof info.sha256 === "string" &&
+    /^[0-9a-f]{64}$/.test(info.sha256);
+
 export const checkForUpdate = async (): Promise<UpdateInfo | null> => {
-    const info = (await getJson(`${VERSION_URL}?t=${Date.now()}`)) as UpdateInfo;
-    if (!info?.version || !info?.zip) throw new Error("version.json is incomplete");
+    const info = await getJson(`${VERSION_URL}?t=${Date.now()}`);
+    if (!isValidUpdate(info)) throw new Error("version.json failed validation");
     const update = isNewer(info.version, VERSION) ? info : null;
     setState({ update });
     return update;
@@ -54,7 +67,8 @@ export const checkForUpdate = async (): Promise<UpdateInfo | null> => {
 export const installUpdate = (u: UpdateInfo) => {
     const backend = (window as any).DeckyBackend;
     // 2 = "update" in Decky's install prompt.
-    return backend.call("utilities/install_plugin", u.zip, PLUGIN_NAME, u.version, u.sha256 ?? "", 2);
+    if (!isValidUpdate(u)) return Promise.reject(new Error("invalid update"));
+    return backend.call("utilities/install_plugin", u.zip, PLUGIN_NAME, u.version, u.sha256, 2);
 };
 
 /** Check shortly after Steam starts and then every few hours. */

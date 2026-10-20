@@ -3,6 +3,21 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.2: Security hardening
+
+- Only `http` and `https` addresses can be opened (no local files or other
+  schemes), including in saved settings and bookmarks.
+- The remote never connects to Steam's own pages (store, community, chat),
+  which hold your Steam login.
+- Updates are only accepted from this repository, pinned to an exact commit,
+  with a SHA-256 fingerprint.
+- Trackpad reading closes any receiver connection that isn't sending
+  controller data within 3 seconds.
+- The plugin log records only the site name, not full addresses.
+- Size limits on data read from Steam's local DevTools port.
+- Reproducible build with pinned tool versions, checked by a **Verify build**
+  GitHub Action. New [SECURITY.md](SECURITY.md).
+
 ## 0.4.1: Cleanup and documentation
 
 - New README, this changelog, and a [how it was made](docs/how-it-was-made.md)
