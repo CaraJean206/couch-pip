@@ -3,6 +3,12 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.3
+
+- Build fix: the bundled file no longer contains paths from the build machine,
+  so anyone's rebuild matches the published file byte for byte (checked by the
+  **Verify build** action).
+
 ## 0.4.2: Security hardening
 
 - Only `http` and `https` addresses can be opened (no local files or other

@@ -42,6 +42,8 @@ await build({
     legalComments: "none",
     nodePaths: (process.env.NODE_PATH || "").split(":").filter(Boolean),
     plugins: [deckyGlobals],
+    // Record node_modules paths as-is, so builds match on every machine.
+    preserveSymlinks: true,
     define: { "process.env.NODE_ENV": '"production"', __VERSION__: JSON.stringify(version) },
     logLevel: "info",
 });
