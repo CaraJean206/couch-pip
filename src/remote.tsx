@@ -41,6 +41,7 @@ export const padStats = {
     api: "", // which Steam input channel is in use
     analog: {} as Record<number, number>, // analog messages per source
     analogLast: "",
+    hid: null as backend.PadStatus | null, // direct controller reading (backend)
 };
 
 /** Steam's client API; newer Steam builds don't always put it on `window`. */
@@ -215,6 +216,17 @@ const usePadMouse = () => {
             });
         }
 
+        // 2b. Read the trackpads straight from the controller (backend). This
+        // is what works on Steam builds that don't pass trackpads to plugins.
+        backend.padsStart().then((st) => (padStats.hid = st)).catch(() => undefined);
+        const hidPoll = setInterval(() => {
+            backend.padsStatus().then((st) => (padStats.hid = st)).catch(() => undefined);
+        }, 1000);
+        cleanups.push(() => {
+            clearInterval(hidPoll);
+            backend.padsStop().catch(() => undefined);
+        });
+
         // 3. Send to the page about 30 times a second.
         const timer = setInterval(() => {
             // Right stick: speed grows with how far it's pushed.
@@ -224,6 +236,10 @@ const usePadMouse = () => {
                 const k = (((mag - deadzone) / (1 - deadzone)) ** 2 * 0.02) / mag;
                 acc.dx += stick.x * k;
                 acc.dy -= stick.y * k * ASPECT_FIX;
+            }
+            if ((padStats.hid?.reports ?? 0) > 0) {
+                // The backend is already moving the cursor from the controller.
+                acc.dx = acc.dy = acc.wheel = 0;
             }
             const moved = Math.abs(acc.dx) + Math.abs(acc.dy) > 0.0005;
             const scrolled = Math.abs(acc.wheel) > 0.002;
@@ -268,6 +284,7 @@ const PadReadout = () => {
     const p = padStats;
     return (
         <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4, fontFamily: "monospace", wordBreak: "break-all" }}>
+            {p.hid ? `controller: ${p.hid.devices} dev · ${p.hid.reports} reports · ${p.hid.touches} touch · ${p.hid.sent} sent${p.hid.error ? " · " + p.hid.error : ""} · ` : "controller: … · "}
             input: {p.api || "…"} · pads: state {p.state} (touch {p.stateWithPads}) · analog{" "}
             {Object.entries(p.analog).map(([k, v]) => `${k}:${v}`).join(" ") || 0}
             {p.analogLast ? ` (${p.analogLast})` : ""} · wheel {p.wheel} · mouse {p.mouse} · clicks {p.clicks} · sent {p.sent}

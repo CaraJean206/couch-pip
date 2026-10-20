@@ -268,6 +268,9 @@ var back = callable("back");
 var reload = callable("reload");
 var setOptions = callable("set_options");
 var listInputDevices = callable("list_input_devices");
+var padsStart = callable("pads_start");
+var padsStop = callable("pads_stop");
+var padsStatus = callable("pads_status");
 var snapshot = callable("snapshot");
 var fillStatus = callable("fill_status");
 var pointer = callable("pointer");
@@ -709,7 +712,9 @@ var padStats = {
   // which Steam input channel is in use
   analog: {},
   // analog messages per source
-  analogLast: ""
+  analogLast: "",
+  hid: null
+  // direct controller reading (backend)
 };
 var findSteamInput = () => {
   const candidates = [];
@@ -858,6 +863,14 @@ var usePadMouse = () => {
         win.removeEventListener("mousedown", onDown, { capture: true });
       });
     }
+    padsStart().then((st) => padStats.hid = st).catch(() => void 0);
+    const hidPoll = setInterval(() => {
+      padsStatus().then((st) => padStats.hid = st).catch(() => void 0);
+    }, 1e3);
+    cleanups.push(() => {
+      clearInterval(hidPoll);
+      padsStop().catch(() => void 0);
+    });
     const timer = setInterval(() => {
       const mag = Math.hypot(stick.x, stick.y);
       const deadzone = 0.2;
@@ -865,6 +878,9 @@ var usePadMouse = () => {
         const k = ((mag - deadzone) / (1 - deadzone)) ** 2 * 0.02 / mag;
         acc.dx += stick.x * k;
         acc.dy -= stick.y * k * ASPECT_FIX;
+      }
+      if ((padStats.hid?.reports ?? 0) > 0) {
+        acc.dx = acc.dy = acc.wheel = 0;
       }
       const moved = Math.abs(acc.dx) + Math.abs(acc.dy) > 5e-4;
       const scrolled = Math.abs(acc.wheel) > 2e-3;
@@ -900,6 +916,7 @@ var PadReadout = () => {
   }, []);
   const p = padStats;
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: { fontSize: 11, opacity: 0.55, marginTop: 4, fontFamily: "monospace", wordBreak: "break-all" }, children: [
+    p.hid ? `controller: ${p.hid.devices} dev \xB7 ${p.hid.reports} reports \xB7 ${p.hid.touches} touch \xB7 ${p.hid.sent} sent${p.hid.error ? " \xB7 " + p.hid.error : ""} \xB7 ` : "controller: \u2026 \xB7 ",
     "input: ",
     p.api || "\u2026",
     " \xB7 pads: state ",
@@ -1052,7 +1069,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.3.7" : "0.0.0";
+var VERSION = true ? "0.4.0" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);

@@ -21,7 +21,9 @@ Squires. What's new in this fork:
   player fills the whole picture (the sites' own fullscreen buttons do the
   same). Press Menu in the remote to switch back to the full page.
 - **Trackpads.** In the remote, the right trackpad (or right stick) is a mouse,
-  clicking the right trackpad clicks, and the left trackpad scrolls.
+  clicking the right trackpad clicks, and the left trackpad scrolls. On the
+  Steam Controller (2026) the trackpads are read straight from the controller
+  while the remote is open (report format from SDL's Triton driver).
 - **Nine positions:** corners, middle of each side, and center, plus fine-tune
   sliders to nudge it, and a size slider from 10% to 80% of the screen.
 - **Updates itself.** Checks GitHub for a new version, shows a notification,

@@ -682,6 +682,8 @@ class Plugin:
         log.info("Couch PiP backend started")
 
     async def _unload(self):
+        if getattr(self, "pad_reader", None):
+            self.pad_reader.stop()
         if self.session:
             self.session.close()
             self.session = None
@@ -957,3 +959,207 @@ class Plugin:
             "devices": devices,
             "hidraw": [{"dev": h, "readable": os.access(f"/dev/{h}", os.R_OK)} for h in hidraw],
         }
+
+
+    async def pads_start(self):
+        """Start reading the trackpads directly (while the remote is open)."""
+        if not getattr(self, "pad_reader", None):
+            self.pad_reader = PadReader(self)
+        self.pad_reader.start()
+        return {"ok": True, **self.pad_reader.stats}
+
+    async def pads_stop(self):
+        if getattr(self, "pad_reader", None):
+            self.pad_reader.stop()
+        return {"ok": True}
+
+    async def pads_status(self):
+        r = getattr(self, "pad_reader", None)
+        return {"ok": True, **(r.stats if r else {"devices": 0, "reports": 0, "touches": 0, "sent": 0, "error": "not started"})}
+
+# --------------------------------------------------------------------------
+# Direct trackpad reading (Steam Controller 2 / "Triton")
+# --------------------------------------------------------------------------
+#
+# Steam doesn't pass trackpad movement to plugins on newer builds, so while
+# the remote is open we read the controller's HID reports ourselves, the same
+# reports Steam reads (Linux gives every reader its own copy). Layout from
+# SDL's SDL_hidapi_steam_triton.c / steam/controller_structs.h (packed, LE).
+
+import struct as _struct
+
+VALVE_VID = 0x28DE
+TRITON_STATE_IDS = (0x42, 0x45)  # TritonMTUNoQuat_t
+TRITON_STATE_TS_ID = 0x47  # TritonMTUNoQuat32TS_t (adds a 16-bit pad timestamp)
+T_RIGHT_PAD_TOUCH = 0x00200000
+T_RIGHT_PAD_CLICK = 0x00400000
+T_LEFT_PAD_TOUCH = 0x02000000
+T_LEFT_PAD_CLICK = 0x04000000
+
+PAD_SPEED = 0.9  # one full right-pad swipe moves the cursor 90% across the page
+SCROLL_SPEED = 2.0  # one full left-pad swipe scrolls two screens
+ASPECT_FIX = 16 / 9  # pads are square, the page is wide
+
+
+def parse_triton_report(data: bytes):
+    """Return (buttons, lpx, lpy, rpx, rpy, rsx, rsy) or None if not a state report."""
+    if not data:
+        return None
+    rid = data[0]
+    if rid in TRITON_STATE_IDS and len(data) >= 1 + 29:
+        _seq, buttons, _tl, _tr, _lsx, _lsy, rsx, rsy, lpx, lpy, _pl, rpx, rpy = _struct.unpack_from(
+            "<BIhhhhhhhhHhh", data, 1
+        )
+    elif rid == TRITON_STATE_TS_ID and len(data) >= 1 + 31:
+        _seq, buttons, _tl, _tr, _lsx, _lsy, rsx, rsy, _ts, lpx, lpy, _pl, rpx, rpy = _struct.unpack_from(
+            "<BIhhhhhhHhhHhh", data, 1
+        )
+    else:
+        return None
+    return buttons, lpx, lpy, rpx, rpy, rsx, rsy
+
+
+def find_valve_hidraw(sys_root: str = "/sys/class/hidraw", dev_root: str = "/dev"):
+    """hidraw nodes that belong to Valve devices (controllers and the Puck receiver)."""
+    found = []
+    try:
+        names = sorted(os.listdir(sys_root))
+    except Exception:
+        return found
+    for name in names:
+        try:
+            with open(os.path.join(sys_root, name, "device", "uevent"), "r", errors="replace") as f:
+                uevent = f.read()
+        except Exception:
+            continue
+        hid_id = ""
+        hid_name = ""
+        for line in uevent.splitlines():
+            if line.startswith("HID_ID="):
+                hid_id = line[7:]
+            elif line.startswith("HID_NAME="):
+                hid_name = line[9:]
+        parts = hid_id.split(":")
+        if len(parts) == 3 and int(parts[1], 16) == VALVE_VID:
+            found.append({"path": os.path.join(dev_root, name), "name": hid_name, "product": int(parts[2], 16)})
+    return found
+
+
+class PadReader:
+    """Reads trackpads straight from the controller while the remote is open."""
+
+    def __init__(self, plugin: "Plugin"):
+        self.plugin = plugin
+        self.fds: list[int] = []
+        self.task = None
+        self.stats = {"devices": 0, "reports": 0, "touches": 0, "sent": 0, "error": ""}
+        self.acc = {"dx": 0.0, "dy": 0.0, "wheel": 0.0}
+        self.right = None
+        self.left = None
+        self.stick = (0.0, 0.0)
+
+    def start(self, sys_root="/sys/class/hidraw", dev_root="/dev", paths=None):
+        self.stop()
+        self.stats = {"devices": 0, "reports": 0, "touches": 0, "sent": 0, "error": ""}
+        loop = asyncio.get_event_loop()
+        candidates = paths if paths is not None else [d["path"] for d in find_valve_hidraw(sys_root, dev_root)]
+        for path in candidates:
+            try:
+                fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK)
+            except Exception as e:
+                self.stats["error"] = f"{os.path.basename(path)}: {e.__class__.__name__}"
+                continue
+            self.fds.append(fd)
+            loop.add_reader(fd, self._on_readable, fd)
+        self.stats["devices"] = len(self.fds)
+        if not self.fds and not self.stats["error"]:
+            self.stats["error"] = "no Valve controller found"
+        self.task = asyncio.ensure_future(self._send_loop())
+
+    def stop(self):
+        loop = asyncio.get_event_loop()
+        for fd in self.fds:
+            try:
+                loop.remove_reader(fd)
+            except Exception:
+                pass
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        self.fds = []
+        if self.task:
+            self.task.cancel()
+            self.task = None
+        self.right = self.left = None
+
+    def _on_readable(self, fd):
+        while True:
+            try:
+                data = os.read(fd, 64)
+            except BlockingIOError:
+                return
+            except Exception as e:
+                self.stats["error"] = f"read: {e.__class__.__name__}"
+                try:
+                    asyncio.get_event_loop().remove_reader(fd)
+                except Exception:
+                    pass
+                return
+            if not data:
+                return
+            self.handle(data)
+
+    def handle(self, data: bytes):
+        parsed = parse_triton_report(data)
+        if not parsed:
+            return
+        self.stats["reports"] += 1
+        buttons, lpx, lpy, rpx, rpy, rsx, rsy = parsed
+        if buttons & T_RIGHT_PAD_TOUCH:
+            self.stats["touches"] += 1
+            if self.right:
+                dx = (rpx - self.right[0]) / 65536
+                dy = (rpy - self.right[1]) / 65536
+                if abs(dx) < 0.25 and abs(dy) < 0.25:  # ignore jumps
+                    self.acc["dx"] += dx * PAD_SPEED
+                    self.acc["dy"] -= dy * PAD_SPEED * ASPECT_FIX  # pad Y points up
+            self.right = (rpx, rpy)
+        else:
+            self.right = None
+        if buttons & T_LEFT_PAD_TOUCH:
+            self.stats["touches"] += 1
+            if self.left:
+                dy = (lpy - self.left[1]) / 65536
+                if abs(dy) < 0.25:
+                    self.acc["wheel"] -= dy * SCROLL_SPEED  # finger down = scroll down
+            self.left = (lpx, lpy)
+        else:
+            self.left = None
+        self.stick = (rsx / 32767, rsy / 32767)
+
+    async def _send_loop(self):
+        try:
+            while True:
+                await asyncio.sleep(0.033)
+                sx, sy = self.stick
+                mag = (sx * sx + sy * sy) ** 0.5
+                if mag > 0.2:
+                    k = (((mag - 0.2) / 0.8) ** 2 * 0.02) / mag
+                    self.acc["dx"] += sx * k
+                    self.acc["dy"] -= sy * k * ASPECT_FIX
+                a = self.acc
+                moved = abs(a["dx"]) + abs(a["dy"]) > 0.0005
+                scrolled = abs(a["wheel"]) > 0.002
+                if not moved and not scrolled:
+                    continue
+                dx, dy, wheel = a["dx"], a["dy"], a["wheel"] if scrolled else 0.0
+                a["dx"] = a["dy"] = 0.0
+                if scrolled:
+                    a["wheel"] = 0.0
+                r = await self.plugin.pointer(dx, dy, wheel, False)
+                self.stats["sent"] += 1
+                if not r.get("ok"):
+                    self.stats["error"] = r.get("error", "")[:80]
+        except asyncio.CancelledError:
+            pass
