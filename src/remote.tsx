@@ -411,7 +411,7 @@ const RemoteModal = ({ closeModal }: { closeModal?: () => void }) => {
                         </span>
                     ))}
                 </div>
-                <PadReadout />
+                {getState().showDiagnostics && <PadReadout />}
                 </div>
             </Focusable>
         </ModalRoot>

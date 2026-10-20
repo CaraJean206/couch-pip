@@ -21,7 +21,7 @@ import sys
 import zipfile
 
 REPO_RAW = "https://raw.githubusercontent.com/CaraJean206/couch-pip"
-FILES = ["plugin.json", "package.json", "main.py", "LICENSE", "README.md", "dist/index.js"]
+FILES = ["plugin.json", "package.json", "main.py", "LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "dist/index.js"]
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ZIP = os.path.join(ROOT, "couch-pip.zip")
 

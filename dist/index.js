@@ -1061,7 +1061,7 @@ var RemoteModal = ({ closeModal }) => {
           " ",
           action
         ] }, button)) }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PadReadout, {})
+        getState().showDiagnostics && /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PadReadout, {})
       ] })
     }
   ) });
@@ -1069,7 +1069,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.0" : "0.0.0";
+var VERSION = true ? "0.4.1" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);

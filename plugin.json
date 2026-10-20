@@ -1,11 +1,11 @@
 {
   "name": "Couch PiP",
-  "author": "Couch PiP contributors (based on Picture in Picture by Ross Squires)",
+  "author": "CaraJean206 (based on Picture in Picture by Ross Squires)",
   "flags": [],
   "api_version": 1,
   "publish": {
     "tags": ["web", "video", "pip", "movies", "tv"],
     "description": "Picture-in-picture video over your games, sized for TVs, with a controller remote for signing in and browsing.",
-    "image": "https://raw.githubusercontent.com/rossimo/decky-pip/refs/heads/main/picture.jpg"
+    "image": "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/assets/banner.png"
   }
 }

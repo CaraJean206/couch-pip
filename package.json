@@ -1,14 +1,32 @@
 {
   "name": "couch-pip",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Picture-in-picture video over games on SteamOS, sized for TVs, with a controller remote",
+  "author": "CaraJean206",
+  "contributors": [
+    "Ross Squires (original Picture in Picture plugin)"
+  ],
+  "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CaraJean206/couch-pip.git"
+  },
+  "homepage": "https://github.com/CaraJean206/couch-pip#readme",
+  "bugs": {
+    "url": "https://github.com/CaraJean206/couch-pip/issues"
+  },
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
     "check": "tsc -p tsconfig.json --noEmit"
   },
-  "keywords": ["decky", "plugin", "steamos", "steam-machine", "pip"],
-  "license": "BSD-3-Clause",
+  "keywords": [
+    "decky",
+    "plugin",
+    "steamos",
+    "steam-machine",
+    "pip"
+  ],
   "devDependencies": {
     "@decky/ui": "^4.11.0",
     "@types/react": "18.3.3",
