@@ -44,7 +44,7 @@ export const padStats = {
 };
 
 /** Steam's client API; newer Steam builds don't always put it on `window`. */
-const findSteamInput = (): any => {
+export const findSteamInput = (): any => {
     const candidates: any[] = [];
     try {
         // Global-scope lookup that also finds globals not attached to window.
@@ -344,7 +344,9 @@ const RemoteModal = ({ closeModal }: { closeModal?: () => void }) => {
                 clickAtCursor();
                 break;
             default:
-                padStats.buttons = [...padStats.buttons.slice(-5), e.detail.button];
+                if (e.detail.button > GamepadButton.CANCEL) {
+                    padStats.buttons = [...padStats.buttons.slice(-5), e.detail.button];
+                }
                 return;
         }
     };

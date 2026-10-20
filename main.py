@@ -603,8 +603,20 @@ JS_HELPER = r"""
     if (!cursor.el || !cursor.el.isConnected) {
       const c = document.createElement('div');
       c.id = '__cpip_cursor';
-      c.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 2l7 19 2.6-7.6L20 11z" ' +
-        'fill="#fff" stroke="#000" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+      // Built with DOM calls: sites like YouTube block inserting raw HTML.
+      const NS = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 24 24');
+      svg.setAttribute('width', '22');
+      svg.setAttribute('height', '22');
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', 'M3 2l7 19 2.6-7.6L20 11z');
+      path.setAttribute('fill', '#fff');
+      path.setAttribute('stroke', '#000');
+      path.setAttribute('stroke-width', '1.5');
+      path.setAttribute('stroke-linejoin', 'round');
+      svg.appendChild(path);
+      c.appendChild(svg);
       document.documentElement.appendChild(c);
       cursor.el = c;
     }
@@ -916,3 +928,32 @@ class Plugin:
             return "data:image/jpeg;base64," + res["data"]
 
         return await self._safe(run())
+
+    async def list_input_devices(self):
+        """Controller devices the system sees (for choosing a direct-read approach)."""
+        try:
+            with open("/proc/bus/input/devices", "r", encoding="utf-8", errors="replace") as f:
+                text = f.read()
+        except Exception as e:
+            return {"ok": False, "error": f"Can't read input devices: {e}"}
+        devices = []
+        for block in text.strip().split("\n\n"):
+            name, handlers, abs_caps = "", "", ""
+            for line in block.splitlines():
+                if line.startswith("N: Name="):
+                    name = line[8:].strip().strip('"')
+                elif line.startswith("H: Handlers="):
+                    handlers = line[12:].strip()
+                elif line.startswith("B: ABS="):
+                    abs_caps = line[7:].strip()
+            events = [h for h in handlers.split() if h.startswith("event")]
+            readable = [e for e in events if os.access(f"/dev/input/{e}", os.R_OK)]
+            if name:
+                devices.append({"name": name, "events": events, "readable": readable, "abs": abs_caps})
+        hidraw = sorted(d for d in os.listdir("/dev") if d.startswith("hidraw")) if os.path.isdir("/dev") else []
+        return {
+            "ok": True,
+            "user": os.environ.get("USER") or str(os.getuid()),
+            "devices": devices,
+            "hidraw": [{"dev": h, "readable": os.access(f"/dev/{h}", os.R_OK)} for h in hidraw],
+        }

@@ -267,6 +267,7 @@ var media = callable("media");
 var back = callable("back");
 var reload = callable("reload");
 var setOptions = callable("set_options");
+var listInputDevices = callable("list_input_devices");
 var snapshot = callable("snapshot");
 var fillStatus = callable("fill_status");
 var pointer = callable("pointer");
@@ -1001,7 +1002,9 @@ var RemoteModal = ({ closeModal }) => {
         clickAtCursor();
         break;
       default:
-        padStats.buttons = [...padStats.buttons.slice(-5), e.detail.button];
+        if (e.detail.button > import_ui4.GamepadButton.CANCEL) {
+          padStats.buttons = [...padStats.buttons.slice(-5), e.detail.button];
+        }
         return;
     }
   };
@@ -1035,7 +1038,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.3.5" : "0.0.0";
+var VERSION = true ? "0.3.6" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1235,6 +1238,42 @@ var Diagnostics = () => {
       }
     ) }),
     shot && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("img", { src: shot, style: { width: "100%", border: "1px solid rgba(255,255,255,0.3)" } }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ButtonItem,
+      {
+        layout: "below",
+        onClick: () => {
+          const input = findSteamInput();
+          if (!input) return setTargets("Steam Input API not found");
+          const names = /* @__PURE__ */ new Set();
+          for (let o = input; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+            Object.getOwnPropertyNames(o).forEach((n) => names.add(n));
+          }
+          const list = [...names].filter((n) => /Register|Controller|Pad|Touch|Analog|State/i.test(n)).sort();
+          setTargets(`Steam Input functions (${list.length}):
+` + list.join("\n"));
+        },
+        children: "Steam input functions"
+      }
+    ) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ButtonItem,
+      {
+        layout: "below",
+        onClick: async () => {
+          const r = await listInputDevices();
+          if (!r.ok) return setTargets(r.error ?? "error");
+          const lines = (r.devices ?? []).map(
+            (d) => `${d.name} [${d.events.join(",")}]${d.readable.length ? " readable" : ""}${d.abs && d.abs !== "0" ? " abs=" + d.abs : ""}`
+          );
+          const hid = (r.hidraw ?? []).map((h) => `${h.dev}${h.readable ? " readable" : ""}`).join(", ");
+          setTargets(`user: ${r.user}
+${lines.join("\n")}
+hidraw: ${hid || "none"}`);
+        },
+        children: "Controller devices"
+      }
+    ) }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
       import_ui5.ToggleField,
       {

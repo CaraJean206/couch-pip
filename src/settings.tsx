@@ -5,7 +5,7 @@ import { FaBackward, FaExpand, FaForward, FaGamepad, FaPlay, FaTv, FaVolumeDown,
 import * as backend from "./backend";
 import { showAddressModal, showSourcesModal } from "./modals";
 import { lastBounds } from "./pip";
-import { showRemote } from "./remote";
+import { findSteamInput, showRemote } from "./remote";
 import { VERSION, checkForUpdate, installUpdate } from "./updates";
 import { getState, setState, useStore } from "./store";
 import { MARGINS, POSITION_LABELS, Position, ViewMode, getScreen, hostOf } from "./util";
@@ -167,6 +167,39 @@ const Diagnostics = () => {
                     <img src={shot} style={{ width: "100%", border: "1px solid rgba(255,255,255,0.3)" }} />
                 </PanelSectionRow>
             )}
+            <PanelSectionRow>
+                <ButtonItem
+                    layout="below"
+                    onClick={() => {
+                        const input = findSteamInput();
+                        if (!input) return setTargets("Steam Input API not found");
+                        const names = new Set<string>();
+                        for (let o = input; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+                            Object.getOwnPropertyNames(o).forEach((n) => names.add(n));
+                        }
+                        const list = [...names].filter((n) => /Register|Controller|Pad|Touch|Analog|State/i.test(n)).sort();
+                        setTargets(`Steam Input functions (${list.length}):\n` + list.join("\n"));
+                    }}
+                >
+                    Steam input functions
+                </ButtonItem>
+            </PanelSectionRow>
+            <PanelSectionRow>
+                <ButtonItem
+                    layout="below"
+                    onClick={async () => {
+                        const r = await backend.listInputDevices();
+                        if (!r.ok) return setTargets(r.error ?? "error");
+                        const lines = (r.devices ?? []).map(
+                            (d) => `${d.name} [${d.events.join(",")}]${d.readable.length ? " readable" : ""}${d.abs && d.abs !== "0" ? " abs=" + d.abs : ""}`,
+                        );
+                        const hid = (r.hidraw ?? []).map((h) => `${h.dev}${h.readable ? " readable" : ""}`).join(", ");
+                        setTargets(`user: ${r.user}\n${lines.join("\n")}\nhidraw: ${hid || "none"}`);
+                    }}
+                >
+                    Controller devices
+                </ButtonItem>
+            </PanelSectionRow>
             <PanelSectionRow>
                 <ToggleField
                     label="Safe mode"
