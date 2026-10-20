@@ -703,8 +703,26 @@ var padStats = {
   // recent button codes we didn't otherwise use
   sent: 0,
   // pointer commands sent to the page
-  error: ""
+  error: "",
+  api: "",
+  // which Steam input channel is in use
+  analog: {},
+  // analog messages per source
+  analogLast: ""
 };
+var findSteamInput = () => {
+  const candidates = [];
+  try {
+    candidates.push((0, eval)("typeof SteamClient !== 'undefined' ? SteamClient : undefined"));
+  } catch {
+  }
+  candidates.push(globalThis.SteamClient, window.SteamClient, getMainWindow()?.SteamClient);
+  for (const c of candidates) if (c?.Input) return c.Input;
+  return null;
+};
+var SRC_LEFT_PAD = 1;
+var SRC_RIGHT_PAD = 2;
+var SRC_RIGHT_STICK = 12;
 var usePadMouse = () => {
   (0, import_react6.useEffect)(() => {
     const acc = { dx: 0, dy: 0, wheel: 0, click: false };
@@ -714,8 +732,10 @@ var usePadMouse = () => {
     let stick = { x: 0, y: 0 };
     let inflight = false;
     const cleanups = [];
-    const input = window.SteamClient?.Input;
+    const input = findSteamInput();
+    const apis = [];
     if (input?.RegisterForControllerStateChanges) {
+      apis.push("state");
       const reg = input.RegisterForControllerStateChanges((changes) => {
         for (const c of changes) {
           padStats.state++;
@@ -757,8 +777,44 @@ var usePadMouse = () => {
         }
       });
       cleanups.push(() => reg?.unregister?.());
-    } else {
-      padStats.error = "Steam controller-state API not found";
+    }
+    if (input?.RegisterForControllerAnalogInputMessages) {
+      apis.push("analog");
+      const lastPad = {};
+      const norm = (v) => Math.abs(v) > 1.5 ? v / 32767 : v;
+      const reg = input.RegisterForControllerAnalogInputMessages((msgs) => {
+        const now = Date.now();
+        for (const m of msgs) {
+          const src = m.nA;
+          const x = norm(m.x ?? 0), y = norm(m.y ?? 0);
+          padStats.analog[src] = (padStats.analog[src] ?? 0) + 1;
+          padStats.analogLast = `${src}: ${x.toFixed(2)},${y.toFixed(2)}`;
+          if (src === SRC_RIGHT_PAD || src === SRC_LEFT_PAD) {
+            const prev = lastPad[src];
+            if (prev && now - prev.at < 150 && (x !== 0 || y !== 0)) {
+              const dx = (x - prev.x) / 2, dy = (y - prev.y) / 2;
+              if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) {
+                if (src === SRC_RIGHT_PAD) {
+                  acc.dx += dx * PAD_SPEED;
+                  acc.dy -= dy * PAD_SPEED * ASPECT_FIX;
+                } else {
+                  acc.wheel -= dy * SCROLL_SPEED;
+                }
+              }
+            }
+            lastPad[src] = x !== 0 || y !== 0 ? { x, y, at: now } : null;
+          } else if (src === SRC_RIGHT_STICK) {
+            stick = { x, y };
+          }
+        }
+      });
+      cleanups.push(() => reg?.unregister?.());
+    }
+    padStats.api = apis.join("+") || "none";
+    if (!apis.length) {
+      const names = input ? Object.keys(Object.getPrototypeOf(input) ?? {}).concat(Object.keys(input)) : [];
+      const reg = names.filter((n) => /Register.*(Controller|Input|Touch)/.test(n));
+      padStats.error = input ? `no controller channel; Input has: ${reg.slice(0, 12).join(", ") || "(none listed)"}` : "Steam Input API not found";
     }
     const win = getMainWindow();
     if (win) {
@@ -815,7 +871,12 @@ var usePadMouse = () => {
     return () => cleanups.forEach((f) => f());
   }, []);
 };
-var clickAtCursor = () => pointer(0, 0, 0, true);
+var clickAtCursor = () => {
+  padStats.sent++;
+  return pointer(0, 0, 0, true).then((r) => {
+    padStats.error = r.ok ? "" : r.error ?? "";
+  });
+};
 var PadReadout = () => {
   const [, tick] = (0, import_react6.useState)(0);
   (0, import_react6.useEffect)(() => {
@@ -824,18 +885,23 @@ var PadReadout = () => {
   }, []);
   const p = padStats;
   return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: { fontSize: 11, opacity: 0.55, marginTop: 4, fontFamily: "monospace", wordBreak: "break-all" }, children: [
-    "pads: state ",
+    "input: ",
+    p.api || "\u2026",
+    " \xB7 pads: state ",
     p.state,
     " (touch ",
     p.stateWithPads,
-    ") \xB7 wheel ",
+    ") \xB7 analog",
+    " ",
+    Object.entries(p.analog).map(([k, v]) => `${k}:${v}`).join(" ") || 0,
+    p.analogLast ? ` (${p.analogLast})` : "",
+    " \xB7 wheel ",
     p.wheel,
     " \xB7 mouse ",
     p.mouse,
     " \xB7 clicks ",
     p.clicks,
-    " \xB7 sent",
-    " ",
+    " \xB7 sent ",
     p.sent,
     p.buttons.length ? ` \xB7 buttons ${p.buttons.join(",")}` : "",
     p.last ? ` \xB7 ${p.last}` : "",
@@ -969,7 +1035,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.3.4" : "0.0.0";
+var VERSION = true ? "0.3.5" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);

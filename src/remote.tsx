@@ -38,7 +38,29 @@ export const padStats = {
     buttons: [] as number[], // recent button codes we didn't otherwise use
     sent: 0, // pointer commands sent to the page
     error: "",
+    api: "", // which Steam input channel is in use
+    analog: {} as Record<number, number>, // analog messages per source
+    analogLast: "",
 };
+
+/** Steam's client API; newer Steam builds don't always put it on `window`. */
+const findSteamInput = (): any => {
+    const candidates: any[] = [];
+    try {
+        // Global-scope lookup that also finds globals not attached to window.
+        candidates.push((0, eval)("typeof SteamClient !== 'undefined' ? SteamClient : undefined"));
+    } catch {
+        // not available here
+    }
+    candidates.push((globalThis as any).SteamClient, (window as any).SteamClient, (getMainWindow() as any)?.SteamClient);
+    for (const c of candidates) if (c?.Input) return c.Input;
+    return null;
+};
+
+// Steam's controller source numbers (EControllerSource).
+const SRC_LEFT_PAD = 1;
+const SRC_RIGHT_PAD = 2;
+const SRC_RIGHT_STICK = 12;
 
 /**
  * Turns the Steam Controller's trackpads (and right stick) into a mouse for
@@ -57,8 +79,10 @@ const usePadMouse = () => {
         const cleanups: (() => void)[] = [];
 
         // 1. Raw controller state.
-        const input = (window as any).SteamClient?.Input;
+        const input = findSteamInput();
+        const apis: string[] = [];
         if (input?.RegisterForControllerStateChanges) {
+            apis.push("state");
             const reg = input.RegisterForControllerStateChanges((changes: any[]) => {
                 for (const c of changes) {
                     padStats.state++;
@@ -101,8 +125,49 @@ const usePadMouse = () => {
                 }
             });
             cleanups.push(() => reg?.unregister?.());
-        } else {
-            padStats.error = "Steam controller-state API not found";
+        }
+
+        // 1b. Analog input messages (trackpads and sticks as Steam's UI sees them).
+        if (input?.RegisterForControllerAnalogInputMessages) {
+            apis.push("analog");
+            const lastPad: Record<number, { x: number; y: number; at: number } | null> = {};
+            const norm = (v: number) => (Math.abs(v) > 1.5 ? v / 32767 : v); // ints or -1..1
+            const reg = input.RegisterForControllerAnalogInputMessages((msgs: any[]) => {
+                const now = Date.now();
+                for (const m of msgs) {
+                    const src = m.nA;
+                    const x = norm(m.x ?? 0), y = norm(m.y ?? 0);
+                    padStats.analog[src] = (padStats.analog[src] ?? 0) + 1;
+                    padStats.analogLast = `${src}: ${x.toFixed(2)},${y.toFixed(2)}`;
+                    if (src === SRC_RIGHT_PAD || src === SRC_LEFT_PAD) {
+                        const prev = lastPad[src];
+                        // A gap means the finger was lifted; start fresh.
+                        if (prev && now - prev.at < 150 && (x !== 0 || y !== 0)) {
+                            const dx = (x - prev.x) / 2, dy = (y - prev.y) / 2; // -1..1 spans the pad
+                            if (Math.abs(dx) < 0.25 && Math.abs(dy) < 0.25) {
+                                if (src === SRC_RIGHT_PAD) {
+                                    acc.dx += dx * PAD_SPEED;
+                                    acc.dy -= dy * PAD_SPEED * ASPECT_FIX;
+                                } else {
+                                    acc.wheel -= dy * SCROLL_SPEED;
+                                }
+                            }
+                        }
+                        lastPad[src] = x !== 0 || y !== 0 ? { x, y, at: now } : null;
+                    } else if (src === SRC_RIGHT_STICK) {
+                        stick = { x, y };
+                    }
+                }
+            });
+            cleanups.push(() => reg?.unregister?.());
+        }
+        padStats.api = apis.join("+") || "none";
+        if (!apis.length) {
+            const names = input ? Object.keys(Object.getPrototypeOf(input) ?? {}).concat(Object.keys(input)) : [];
+            const reg = names.filter((n) => /Register.*(Controller|Input|Touch)/.test(n));
+            padStats.error = input
+                ? `no controller channel; Input has: ${reg.slice(0, 12).join(", ") || "(none listed)"}`
+                : "Steam Input API not found";
         }
 
         // 2. Mouse and scroll-wheel events Steam sends to its own window.
@@ -171,7 +236,12 @@ const usePadMouse = () => {
 };
 
 /** Click under the cursor (for trackpad clicks that arrive as buttons). */
-const clickAtCursor = () => backend.pointer(0, 0, 0, true);
+const clickAtCursor = () => {
+    padStats.sent++;
+    return backend.pointer(0, 0, 0, true).then((r) => {
+        padStats.error = r.ok ? "" : r.error ?? "";
+    });
+};
 
 const PadReadout = () => {
     const [, tick] = useState(0);
@@ -182,8 +252,9 @@ const PadReadout = () => {
     const p = padStats;
     return (
         <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4, fontFamily: "monospace", wordBreak: "break-all" }}>
-            pads: state {p.state} (touch {p.stateWithPads}) · wheel {p.wheel} · mouse {p.mouse} · clicks {p.clicks} · sent{" "}
-            {p.sent}
+            input: {p.api || "…"} · pads: state {p.state} (touch {p.stateWithPads}) · analog{" "}
+            {Object.entries(p.analog).map(([k, v]) => `${k}:${v}`).join(" ") || 0}
+            {p.analogLast ? ` (${p.analogLast})` : ""} · wheel {p.wheel} · mouse {p.mouse} · clicks {p.clicks} · sent {p.sent}
             {p.buttons.length ? ` · buttons ${p.buttons.join(",")}` : ""}
             {p.last ? ` · ${p.last}` : ""}
             {p.error ? ` · ${p.error}` : ""}
