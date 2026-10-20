@@ -22,6 +22,7 @@ export interface State {
     nudgeY: number; // share of screen height, + moves down
     update: { version: string; zip: string; sha256?: string } | null;
     safe: boolean;
+    remoteGuideTop: number | null; // where the remote's guide starts on screen (CSS px)
 }
 
 const STORAGE_KEY = "couch-pip";
@@ -43,6 +44,7 @@ const defaults: State = {
     nudgeY: 0,
     update: null,
     safe: false,
+    remoteGuideTop: null,
 };
 
 const load = (): State => {

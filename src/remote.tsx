@@ -181,7 +181,7 @@ const PadReadout = () => {
     }, []);
     const p = padStats;
     return (
-        <div style={{ fontSize: 11, opacity: 0.55, marginTop: 8, fontFamily: "monospace" }}>
+        <div style={{ fontSize: 11, opacity: 0.55, marginTop: 4, fontFamily: "monospace", wordBreak: "break-all" }}>
             pads: state {p.state} (touch {p.stateWithPads}) · wheel {p.wheel} · mouse {p.mouse} · clicks {p.clicks} · sent{" "}
             {p.sent}
             {p.buttons.length ? ` · buttons ${p.buttons.join(",")}` : ""}
@@ -199,6 +199,24 @@ const PadReadout = () => {
 const RemoteModal = ({ closeModal }: { closeModal?: () => void }) => {
     const [status, setStatus] = useState("Connecting to the page…");
     const busy = useRef(false);
+    const guideRef = useRef<HTMLDivElement | null>(null);
+
+    // Measure where the guide really sits on this screen, so the browser
+    // view can end just above it instead of covering it.
+    useEffect(() => {
+        const measure = () => {
+            const top = guideRef.current?.getBoundingClientRect().top;
+            if (top && top > 0 && Math.abs(top - (getState().remoteGuideTop ?? 0)) > 2) {
+                setState({ remoteGuideTop: Math.round(top) });
+            }
+        };
+        measure();
+        const t = setInterval(measure, 500);
+        return () => {
+            clearInterval(t);
+            setState({ remoteGuideTop: null });
+        };
+    }, []);
     usePadMouse();
 
     useEffect(() => {
@@ -267,7 +285,7 @@ const RemoteModal = ({ closeModal }: { closeModal?: () => void }) => {
     };
 
     return (
-        <ModalRoot closeModal={closeModal} onCancel={closeModal} bAllowFullSize>
+        <ModalRoot closeModal={closeModal} onCancel={closeModal}>
             <Focusable
                 noFocusRing
                 onActivate={onActivate}
@@ -276,10 +294,11 @@ const RemoteModal = ({ closeModal }: { closeModal?: () => void }) => {
                 onCancelActionDescription="Exit remote"
                 onSecondaryActionDescription="Play / pause"
                 onOptionsActionDescription="Type"
-                style={{ minHeight: "86vh", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}
+                style={{ height: "68vh", display: "flex", flexDirection: "column", justifyContent: "flex-end" }}
             >
-                <div style={{ fontSize: 16, marginBottom: 10, color: "#dcdedf" }}>{status}</div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 18px", fontSize: 13, opacity: 0.75 }}>
+                <div ref={guideRef}>
+                <div style={{ fontSize: 15, marginBottom: 6, color: "#dcdedf" }}>{status}</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12, opacity: 0.75 }}>
                     {GUIDE.map(([button, action]) => (
                         <span key={button}>
                             <b>{button}</b> {action}
@@ -287,6 +306,7 @@ const RemoteModal = ({ closeModal }: { closeModal?: () => void }) => {
                     ))}
                 </div>
                 <PadReadout />
+                </div>
             </Focusable>
         </ModalRoot>
     );

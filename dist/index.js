@@ -308,7 +308,8 @@ var defaults = {
   nudgeX: 0,
   nudgeY: 0,
   update: null,
-  safe: false
+  safe: false,
+  remoteGuideTop: null
 };
 var load = () => {
   try {
@@ -418,7 +419,9 @@ var computeBounds = (s, obs) => {
   };
   if (s.viewMode === 4 /* Remote */) {
     const m = Math.round(screen.height * 0.03);
-    return { x: area.x + m, y: m, width: area.width - m * 2, height: Math.round(screen.height * 0.72) };
+    const guideTop = s.remoteGuideTop ?? screen.height * 0.68;
+    const height2 = Math.round(Math.min(screen.height * 0.75, Math.max(screen.height * 0.3, guideTop - m * 2)));
+    return { x: area.x + m, y: m, width: area.width - m * 2, height: height2 };
   }
   const margin = Math.round(screen.height * (s.viewMode === 1 /* Expand */ ? 0.04 : s.margin));
   const box = { x: area.x + margin, y: area.y + margin, width: area.width - margin * 2, height: area.height - margin * 2 };
@@ -820,7 +823,7 @@ var PadReadout = () => {
     return () => clearInterval(t);
   }, []);
   const p = padStats;
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: { fontSize: 11, opacity: 0.55, marginTop: 8, fontFamily: "monospace" }, children: [
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { style: { fontSize: 11, opacity: 0.55, marginTop: 4, fontFamily: "monospace", wordBreak: "break-all" }, children: [
     "pads: state ",
     p.state,
     " (touch ",
@@ -842,6 +845,21 @@ var PadReadout = () => {
 var RemoteModal = ({ closeModal }) => {
   const [status, setStatus] = (0, import_react6.useState)("Connecting to the page\u2026");
   const busy = (0, import_react6.useRef)(false);
+  const guideRef = (0, import_react6.useRef)(null);
+  (0, import_react6.useEffect)(() => {
+    const measure = () => {
+      const top = guideRef.current?.getBoundingClientRect().top;
+      if (top && top > 0 && Math.abs(top - (getState().remoteGuideTop ?? 0)) > 2) {
+        setState({ remoteGuideTop: Math.round(top) });
+      }
+    };
+    measure();
+    const t = setInterval(measure, 500);
+    return () => {
+      clearInterval(t);
+      setState({ remoteGuideTop: null });
+    };
+  }, []);
   usePadMouse();
   (0, import_react6.useEffect)(() => {
     setState((s) => ({
@@ -925,7 +943,7 @@ var RemoteModal = ({ closeModal }) => {
     const r = await run(() => click(), (res) => res === "editable" ? "Text box selected" : res);
     if (r?.ok && r.result === "editable") typeText();
   };
-  return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ui4.ModalRoot, { closeModal, onCancel: closeModal, bAllowFullSize: true, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)(
+  return /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(import_ui4.ModalRoot, { closeModal, onCancel: closeModal, children: /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(
     import_ui4.Focusable,
     {
       noFocusRing: true,
@@ -935,23 +953,23 @@ var RemoteModal = ({ closeModal }) => {
       onCancelActionDescription: "Exit remote",
       onSecondaryActionDescription: "Play / pause",
       onOptionsActionDescription: "Type",
-      style: { minHeight: "86vh", display: "flex", flexDirection: "column", justifyContent: "flex-end" },
-      children: [
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { style: { fontSize: 16, marginBottom: 10, color: "#dcdedf" }, children: status }),
-        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: "6px 18px", fontSize: 13, opacity: 0.75 }, children: GUIDE.map(([button, action]) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { children: [
+      style: { height: "68vh", display: "flex", flexDirection: "column", justifyContent: "flex-end" },
+      children: /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("div", { ref: guideRef, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { style: { fontSize: 15, marginBottom: 6, color: "#dcdedf" }, children: status }),
+        /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("div", { style: { display: "flex", flexWrap: "wrap", gap: "2px 14px", fontSize: 12, opacity: 0.75 }, children: GUIDE.map(([button, action]) => /* @__PURE__ */ (0, import_jsx_runtime3.jsxs)("span", { children: [
           /* @__PURE__ */ (0, import_jsx_runtime3.jsx)("b", { children: button }),
           " ",
           action
         ] }, button)) }),
         /* @__PURE__ */ (0, import_jsx_runtime3.jsx)(PadReadout, {})
-      ]
+      ] })
     }
   ) });
 };
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.3.3" : "0.0.0";
+var VERSION = true ? "0.3.4" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);

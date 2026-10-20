@@ -118,7 +118,10 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number; keyboar
         // Big view at the top, leaving the bottom of the screen for the
         // remote's button guide.
         const m = Math.round(screen.height * 0.03);
-        return { x: area.x + m, y: m, width: area.width - m * 2, height: Math.round(screen.height * 0.72) };
+        // End just above the guide once we know where it is on this screen.
+        const guideTop = s.remoteGuideTop ?? screen.height * 0.68;
+        const height = Math.round(Math.min(screen.height * 0.75, Math.max(screen.height * 0.3, guideTop - m * 2)));
+        return { x: area.x + m, y: m, width: area.width - m * 2, height };
     }
 
     const margin = Math.round(screen.height * (s.viewMode === ViewMode.Expand ? 0.04 : s.margin));
