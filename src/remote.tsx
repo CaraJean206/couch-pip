@@ -160,6 +160,22 @@ const usePadMouse = () => {
                 }
             });
             cleanups.push(() => reg?.unregister?.());
+            // Steam only sends analog messages after they're switched on.
+            if (input.EnableControllerAnalogInputMessages) {
+                try {
+                    input.EnableControllerAnalogInputMessages(true);
+                    apis[apis.length - 1] = "analog (on)";
+                    cleanups.push(() => {
+                        try {
+                            input.EnableControllerAnalogInputMessages(false);
+                        } catch {
+                            // ignore
+                        }
+                    });
+                } catch (e) {
+                    padStats.error = `couldn't switch on analog input: ${e}`;
+                }
+            }
         }
         padStats.api = apis.join("+") || "none";
         if (!apis.length) {

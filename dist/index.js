@@ -810,6 +810,20 @@ var usePadMouse = () => {
         }
       });
       cleanups.push(() => reg?.unregister?.());
+      if (input.EnableControllerAnalogInputMessages) {
+        try {
+          input.EnableControllerAnalogInputMessages(true);
+          apis[apis.length - 1] = "analog (on)";
+          cleanups.push(() => {
+            try {
+              input.EnableControllerAnalogInputMessages(false);
+            } catch {
+            }
+          });
+        } catch (e) {
+          padStats.error = `couldn't switch on analog input: ${e}`;
+        }
+      }
     }
     padStats.api = apis.join("+") || "none";
     if (!apis.length) {
@@ -1038,7 +1052,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.3.6" : "0.0.0";
+var VERSION = true ? "0.3.7" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
