@@ -1,46 +1,24 @@
-import merge from 'lodash/merge'
+import { staticClasses } from "@decky/ui";
 import { FaTv } from "react-icons/fa";
-import { StateManager } from "cotton-box";
-import { quickAccessMenuClasses } from "@decky/ui";
-import { definePlugin, routerHook, } from "@decky/api";
 
+import { definePlugin, routerHook } from "./decky";
 import { PipOuter } from "./pip";
 import { Settings } from "./settings";
-import { Position, ViewMode } from "./util";
-import { State, GlobalContext } from "./globalState";
+import { setState } from "./store";
+import { PLUGIN_NAME, ViewMode } from "./util";
 
 export default definePlugin(() => {
-    const state = new StateManager<State>(merge<Partial<State>, State, Partial<State>>(
-        {},
-        {
-            viewMode: ViewMode.Closed,
-            visible: true,
-            position: Position.TopRight,
-            margin: 30,
-            size: 1,
-            url: "https://netflix.com"
-        },
-        JSON.parse(localStorage.getItem('pip') ?? '{}')));
-
-    state.watch(({ position, margin, size, url }) =>
-        localStorage.setItem('pip', JSON.stringify({ position, margin, size, url })));
-
-    routerHook.addGlobalComponent("PictureInPicture", () => {
-        return <GlobalContext.Provider value={state}>
-            <PipOuter />
-        </GlobalContext.Provider>
-    });
+    // Start closed after every reboot or reload; settings are remembered.
+    setState({ viewMode: ViewMode.Closed, visible: true });
+    routerHook.addGlobalComponent("CouchPiP", PipOuter);
 
     return {
-        name: "Picture in Picture",
-        titleView: <div className={quickAccessMenuClasses.Title}>Picture in Picture</div>,
+        name: PLUGIN_NAME,
+        titleView: <div className={staticClasses.Title}>{PLUGIN_NAME}</div>,
         icon: <FaTv />,
-        content:
-            <GlobalContext.Provider value={state}>
-                <Settings />
-            </GlobalContext.Provider>,
+        content: <Settings />,
         onDismount() {
-            routerHook.removeGlobalComponent("PictureInPicture");
+            routerHook.removeGlobalComponent("CouchPiP");
         },
     };
 });

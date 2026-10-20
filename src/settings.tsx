@@ -1,164 +1,238 @@
-import {
-    PanelSection,
-    PanelSectionRow,
-    DropdownItem,
-    SliderField,
-    showModal,
-    ButtonItem,
-    ToggleField
-} from "@decky/ui";
-import { useEffect } from "react";
-import { FaEdit } from "react-icons/fa";
+import { ButtonItem, Field, Focusable, DialogButton, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
+import { useEffect, useState } from "react";
+import { FaBackward, FaForward, FaGamepad, FaPlay, FaTv, FaVolumeDown, FaVolumeUp } from "react-icons/fa";
 
-import { Position, ViewMode } from "./util";
-import { useGlobalState } from "./globalState";
-import { UrlModalWithState } from "./urlModal";
+import * as backend from "./backend";
+import { showAddressModal, showSourcesModal } from "./modals";
+import { lastBounds } from "./pip";
+import { showRemote } from "./remote";
+import { getState, setState, useStore } from "./store";
+import { MARGINS, POSITION_LABELS, Position, SIZES, ViewMode, getScreen, hostOf } from "./util";
+
+const nearestIndex = (list: { value: number }[], v: number) =>
+    list.reduce((best, item, i) => (Math.abs(item.value - v) < Math.abs(list[best].value - v) ? i : best), 0);
+
+const POSITION_ORDER = [
+    Position.TopLeft, Position.Top, Position.TopRight, Position.Right,
+    Position.BottomRight, Position.Bottom, Position.BottomLeft, Position.Left,
+];
+
+const iconButton = { minWidth: 0, padding: "10px 0", flex: 1, display: "flex", justifyContent: "center" };
+
+const MediaRow = () => {
+    const [msg, setMsg] = useState("");
+    const act = async (action: string, amount = 0) => {
+        const r = await backend.withPage(getState().url, () => backend.media(action, amount));
+        setMsg(r.ok ? String(r.result ?? "") : r.error ?? "");
+    };
+    return (
+        <>
+            <PanelSectionRow>
+                <Focusable style={{ display: "flex", gap: 6 }} flow-children="horizontal">
+                    <DialogButton style={iconButton} onClick={() => act("seek", -10)}><FaBackward /></DialogButton>
+                    <DialogButton style={iconButton} onClick={() => act("toggle")}><FaPlay /></DialogButton>
+                    <DialogButton style={iconButton} onClick={() => act("seek", 10)}><FaForward /></DialogButton>
+                    <DialogButton style={iconButton} onClick={() => act("volume", -0.1)}><FaVolumeDown /></DialogButton>
+                    <DialogButton style={iconButton} onClick={() => act("volume", 0.1)}><FaVolumeUp /></DialogButton>
+                </Focusable>
+            </PanelSectionRow>
+            {msg && (
+                <PanelSectionRow>
+                    <div style={{ fontSize: 12, opacity: 0.7, padding: "0 4px" }}>{msg}</div>
+                </PanelSectionRow>
+            )}
+        </>
+    );
+};
+
+const Diagnostics = () => {
+    const s = useStore();
+    const [targets, setTargets] = useState<string>("");
+    const screen = getScreen();
+    return (
+        <PanelSection title="Diagnostics">
+            <PanelSectionRow>
+                <div style={{ fontSize: 12, lineHeight: 1.5, wordBreak: "break-all" }}>
+                    Screen: {screen.width}×{screen.height} CSS px, scale {screen.dpr}
+                    {screen.detected ? "" : " (not detected, using Steam Deck size)"}
+                    <br />
+                    PiP bounds: {lastBounds ? `${lastBounds.x},${lastBounds.y} ${lastBounds.width}×${lastBounds.height}` : "none"}
+                    <br />
+                    Page: {s.url}
+                </div>
+            </PanelSectionRow>
+            <PanelSectionRow>
+                <ToggleField
+                    label="Use device pixels"
+                    description="Turn on if the picture is the wrong size or in the wrong place."
+                    checked={s.useDevicePixels}
+                    onChange={(v: boolean) => setState({ useDevicePixels: v })}
+                />
+            </PanelSectionRow>
+            <PanelSectionRow>
+                <ButtonItem
+                    layout="below"
+                    onClick={async () => {
+                        const r = await backend.listTargets();
+                        if (!r.ok) return setTargets(r.error ?? "error");
+                        setTargets(
+                            (r.targets ?? [])
+                                .filter((t) => t.type === "page")
+                                .map((t) => `${t.id === r.attached ? "▶ " : ""}${t.title || "(no title)"} — ${t.url}`)
+                                .join("\n"),
+                        );
+                    }}
+                >
+                    List browser pages
+                </ButtonItem>
+            </PanelSectionRow>
+            {targets && (
+                <PanelSectionRow>
+                    <div style={{ fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.8 }}>{targets}</div>
+                </PanelSectionRow>
+            )}
+        </PanelSection>
+    );
+};
 
 export const Settings = () => {
-    const [{ viewMode, position, margin, url, size }, setGlobalState, stateContext] = useGlobalState();
+    const s = useStore();
+    const open = s.viewMode !== ViewMode.Closed;
 
+    // Opening the panel shows the picture again if it was hidden by a modal.
     useEffect(() => {
-        setGlobalState(state => ({
-            ...state,
-            visible: true,
-            viewMode: state.viewMode == ViewMode.Closed
-                ? ViewMode.Picture
-                : state.viewMode
-        }));
+        setState({ visible: true });
     }, []);
 
-    const positionOptions = [
-        { label: 'Top Left', data: Position.TopLeft },
-        { label: 'Top', data: Position.Top },
-        { label: 'Top Right', data: Position.TopRight },
-        { label: 'Right', data: Position.Right },
-        { label: 'Bottom Right', data: Position.BottomRight },
-        { label: 'Bottom', data: Position.Bottom },
-        { label: 'Bottom Left', data: Position.BottomLeft },
-        { label: 'Left', data: Position.Left },
-    ];
-
-    return <>
-        <PanelSection>
-            {viewMode == ViewMode.Closed && <>
+    if (!open) {
+        return (
+            <PanelSection>
                 <PanelSectionRow>
-                    <ButtonItem
-                        bottomSeparator="none"
-                        layout="below"
-                        onClick={() => setGlobalState(state => ({
-                            ...state,
-                            viewMode: ViewMode.Picture
-                        }))}>
-                        Open
+                    <ButtonItem layout="below" onClick={() => setState({ viewMode: ViewMode.Picture, visible: true })}>
+                        <FaTv style={{ marginRight: 8 }} />
+                        Open {hostOf(s.url)}
                     </ButtonItem>
                 </PanelSectionRow>
-            </>}
-            {viewMode != ViewMode.Closed && <>
                 <PanelSectionRow>
-                    <ButtonItem
-                        label='Address'
-                        layout="below"
-                        onClick={() => showModal(<UrlModalWithState value={stateContext} />)}>
-                        <div style={{ display: 'flex' }}>
-                            <FaEdit />
-                            &nbsp;&nbsp;
-                            <div style={{ maxWidth: 180, textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                                {url}
-                            </div>
-                        </div>
+                    <ButtonItem layout="below" onClick={showSourcesModal}>
+                        Choose what to watch…
+                    </ButtonItem>
+                </PanelSectionRow>
+            </PanelSection>
+        );
+    }
+
+    const sizeIndex = nearestIndex(SIZES, s.size);
+    const marginIndex = nearestIndex(MARGINS, s.margin);
+
+    return (
+        <>
+            <PanelSection>
+                <PanelSectionRow>
+                    <ButtonItem layout="below" onClick={showRemote}>
+                        <FaGamepad style={{ marginRight: 8 }} />
+                        Control page with controller
+                    </ButtonItem>
+                </PanelSectionRow>
+                <MediaRow />
+                <PanelSectionRow>
+                    <ButtonItem layout="below" label="Watching" description={hostOf(s.url)} onClick={showSourcesModal}>
+                        Change…
+                    </ButtonItem>
+                </PanelSectionRow>
+                <PanelSectionRow>
+                    <ButtonItem layout="below" onClick={showAddressModal}>
+                        Go to address…
                     </ButtonItem>
                 </PanelSectionRow>
                 <PanelSectionRow>
                     <ToggleField
-                        label='Expand'
-                        checked={viewMode == ViewMode.Expand}
-                        onChange={checked => {
-                            setGlobalState(state => ({
-                                ...state,
-                                viewMode: checked
-                                    ? ViewMode.Expand
-                                    : ViewMode.Picture
-                            }))
-                        }} />
+                        label="Large"
+                        description="Fill most of the screen"
+                        checked={s.viewMode === ViewMode.Expand}
+                        onChange={(v: boolean) => setState({ viewMode: v ? ViewMode.Expand : ViewMode.Picture })}
+                    />
                 </PanelSectionRow>
-            </>}
-            {viewMode == ViewMode.Picture && <>
+            </PanelSection>
+
+            {s.viewMode === ViewMode.Picture && (
+                <PanelSection title="Picture">
+                    <PanelSectionRow>
+                        <Field label="Position" childrenContainerWidth="max">
+                            <Focusable style={{ display: "flex", gap: 6 }} flow-children="horizontal">
+                                <DialogButton
+                                    style={{ minWidth: 0, flex: 1 }}
+                                    onClick={() => {
+                                        const i = POSITION_ORDER.indexOf(s.position);
+                                        setState({ position: POSITION_ORDER[(i + POSITION_ORDER.length - 1) % POSITION_ORDER.length] });
+                                    }}
+                                >
+                                    ◀
+                                </DialogButton>
+                                <div style={{ flex: 3, textAlign: "center", alignSelf: "center" }}>{POSITION_LABELS[s.position]}</div>
+                                <DialogButton
+                                    style={{ minWidth: 0, flex: 1 }}
+                                    onClick={() => {
+                                        const i = POSITION_ORDER.indexOf(s.position);
+                                        setState({ position: POSITION_ORDER[(i + 1) % POSITION_ORDER.length] });
+                                    }}
+                                >
+                                    ▶
+                                </DialogButton>
+                            </Focusable>
+                        </Field>
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                        <SliderField
+                            label="Size"
+                            value={sizeIndex}
+                            min={0}
+                            max={SIZES.length - 1}
+                            step={1}
+                            notchCount={SIZES.length}
+                            notchTicksVisible
+                            notchLabels={SIZES.map((x, i) => ({ label: x.label, notchIndex: i, value: i }))}
+                            onChange={(i: number) => setState({ size: SIZES[i].value })}
+                        />
+                    </PanelSectionRow>
+                    <PanelSectionRow>
+                        <SliderField
+                            label="Edge spacing"
+                            value={marginIndex}
+                            min={0}
+                            max={MARGINS.length - 1}
+                            step={1}
+                            notchCount={MARGINS.length}
+                            notchTicksVisible
+                            notchLabels={MARGINS.map((x, i) => ({ label: x.label, notchIndex: i, value: i }))}
+                            onChange={(i: number) => setState({ margin: MARGINS[i].value })}
+                        />
+                    </PanelSectionRow>
+                </PanelSection>
+            )}
+
+            <PanelSection>
                 <PanelSectionRow>
-                    <DropdownItem
-                        label='View'
-                        selectedOption={position}
-                        rgOptions={positionOptions}
-                        onMenuOpened={() =>
-                            setGlobalState(state => ({
-                                ...state,
-                                visible: false
-                            }))}
-                        onChange={option =>
-                            setGlobalState(state => ({
-                                ...state,
-                                visible: true,
-                                position: option.data,
-                                viewMode: ViewMode.Picture
-                            }))} />
+                    <ToggleField
+                        label="Show diagnostics"
+                        checked={s.showDiagnostics}
+                        onChange={(v: boolean) => setState({ showDiagnostics: v })}
+                    />
                 </PanelSectionRow>
-                <PanelSectionRow>
-                    <SliderField
-                        label='Size'
-                        value={size}
-                        onChange={size =>
-                            setGlobalState(state => ({
-                                ...state,
-                                size,
-                                visible: true,
-                                viewMode: ViewMode.Picture
-                            }))}
-                        min={0.70}
-                        max={1.30}
-                        step={0.15}
-                        notchCount={3}
-                        notchTicksVisible={true}
-                        notchLabels={[
-                            { label: "S", notchIndex: 0, value: 0.70 },
-                            { label: "M", notchIndex: 1, value: 1 },
-                            { label: "L", notchIndex: 2, value: 1.30 }
-                        ]} />
-                </PanelSectionRow>
-                <PanelSectionRow>
-                    <SliderField
-                        label='Margin'
-                        value={margin}
-                        onChange={margin =>
-                            setGlobalState(state => ({
-                                ...state,
-                                margin,
-                                visible: true,
-                                viewMode: ViewMode.Picture
-                            }))}
-                        min={0}
-                        max={60}
-                        step={15}
-                        notchCount={3}
-                        notchTicksVisible={true}
-                        notchLabels={[
-                            { label: "S", notchIndex: 0, value: 0 },
-                            { label: "M", notchIndex: 1, value: 30 },
-                            { label: "L", notchIndex: 2, value: 60 },
-                        ]} />
-                </PanelSectionRow>
-            </>}
-            {viewMode != ViewMode.Closed && <>
                 <PanelSectionRow>
                     <ButtonItem
-                        bottomSeparator="none"
                         layout="below"
-                        onClick={() => setGlobalState(state => ({
-                            ...state,
-                            viewMode: ViewMode.Closed
-                        }))}>
-                        Close
+                        onClick={() => {
+                            backend.detach();
+                            setState({ viewMode: ViewMode.Closed });
+                        }}
+                    >
+                        Close picture
                     </ButtonItem>
                 </PanelSectionRow>
-            </>}
-        </PanelSection>
-    </>;
+            </PanelSection>
+
+            {s.showDiagnostics && <Diagnostics />}
+        </>
+    );
 };
