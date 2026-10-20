@@ -1,6 +1,6 @@
 import { ButtonItem, Focusable, DialogButton, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
 import { useEffect, useState } from "react";
-import { FaBackward, FaForward, FaGamepad, FaPlay, FaTv, FaVolumeDown, FaVolumeUp } from "react-icons/fa";
+import { FaBackward, FaExpand, FaForward, FaGamepad, FaPlay, FaTv, FaVolumeDown, FaVolumeUp } from "react-icons/fa";
 
 import * as backend from "./backend";
 import { showAddressModal, showSourcesModal } from "./modals";
@@ -80,6 +80,7 @@ const MediaRow = () => {
                     <DialogButton style={iconButton} onClick={() => act("seek", 10)}><FaForward /></DialogButton>
                     <DialogButton style={iconButton} onClick={() => act("volume", -0.1)}><FaVolumeDown /></DialogButton>
                     <DialogButton style={iconButton} onClick={() => act("volume", 0.1)}><FaVolumeUp /></DialogButton>
+                    <DialogButton style={iconButton} onClick={() => act("fill")}><FaExpand /></DialogButton>
                 </Focusable>
             </PanelSectionRow>
             {msg && (
@@ -94,6 +95,7 @@ const MediaRow = () => {
 const Diagnostics = () => {
     const s = useStore();
     const [targets, setTargets] = useState<string>("");
+    const [shot, setShot] = useState<string>("");
     const screen = getScreen();
     return (
         <PanelSection title="Diagnostics">
@@ -142,6 +144,36 @@ const Diagnostics = () => {
                 >
                     Check video fill
                 </ButtonItem>
+            </PanelSectionRow>
+            <PanelSectionRow>
+                <ButtonItem
+                    layout="below"
+                    description="Shows what the browser itself is drawing in the picture"
+                    onClick={async () => {
+                        setShot("");
+                        setTargets("Taking snapshot…");
+                        const r = await backend.withPage(getState().url, () => backend.snapshot());
+                        if (r.ok && r.result) {
+                            setShot(r.result);
+                            setTargets("");
+                        } else setTargets(r.error ?? "Snapshot failed");
+                    }}
+                >
+                    Snapshot page
+                </ButtonItem>
+            </PanelSectionRow>
+            {shot && (
+                <PanelSectionRow>
+                    <img src={shot} style={{ width: "100%", border: "1px solid rgba(255,255,255,0.3)" }} />
+                </PanelSectionRow>
+            )}
+            <PanelSectionRow>
+                <ToggleField
+                    label="Safe mode"
+                    description="Don't change the page at all (no scrollbar hiding, fill or mouse). Reloads the page."
+                    checked={s.safe}
+                    onChange={(v: boolean) => setState({ safe: v })}
+                />
             </PanelSectionRow>
             {targets && (
                 <PanelSectionRow>

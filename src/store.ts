@@ -21,10 +21,11 @@ export interface State {
     nudgeX: number; // share of screen width, + moves right
     nudgeY: number; // share of screen height, + moves down
     update: { version: string; zip: string; sha256?: string } | null;
+    safe: boolean;
 }
 
 const STORAGE_KEY = "couch-pip";
-const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "nudgeX", "nudgeY"];
+const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "nudgeX", "nudgeY", "safe"];
 
 const defaults: State = {
     viewMode: ViewMode.Closed,
@@ -41,6 +42,7 @@ const defaults: State = {
     nudgeX: 0,
     nudgeY: 0,
     update: null,
+    safe: false,
 };
 
 const load = (): State => {

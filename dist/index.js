@@ -186,6 +186,9 @@ function FaGamepad(props) {
 function FaForward(props) {
   return GenIcon({ "tag": "svg", "attr": { "viewBox": "0 0 512 512" }, "child": [{ "tag": "path", "attr": { "d": "M500.5 231.4l-192-160C287.9 54.3 256 68.6 256 96v320c0 27.4 31.9 41.8 52.5 24.6l192-160c15.3-12.8 15.3-36.4 0-49.2zm-256 0l-192-160C31.9 54.3 0 68.6 0 96v320c0 27.4 31.9 41.8 52.5 24.6l192-160c15.3-12.8 15.3-36.4 0-49.2z" }, "child": [] }] })(props);
 }
+function FaExpand(props) {
+  return GenIcon({ "tag": "svg", "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M0 180V56c0-13.3 10.7-24 24-24h124c6.6 0 12 5.4 12 12v40c0 6.6-5.4 12-12 12H64v84c0 6.6-5.4 12-12 12H12c-6.6 0-12-5.4-12-12zM288 44v40c0 6.6 5.4 12 12 12h84v84c0 6.6 5.4 12 12 12h40c6.6 0 12-5.4 12-12V56c0-13.3-10.7-24-24-24H300c-6.6 0-12 5.4-12 12zm148 276h-40c-6.6 0-12 5.4-12 12v84h-84c-6.6 0-12 5.4-12 12v40c0 6.6 5.4 12 12 12h124c13.3 0 24-10.7 24-24V332c0-6.6-5.4-12-12-12zM160 468v-40c0-6.6-5.4-12-12-12H64v-84c0-6.6-5.4-12-12-12H12c-6.6 0-12 5.4-12 12v124c0 13.3 10.7 24 24 24h124c6.6 0 12-5.4 12-12z" }, "child": [] }] })(props);
+}
 function FaBackward(props) {
   return GenIcon({ "tag": "svg", "attr": { "viewBox": "0 0 512 512" }, "child": [{ "tag": "path", "attr": { "d": "M11.5 280.6l192 160c20.6 17.2 52.5 2.8 52.5-24.6V96c0-27.4-31.9-41.8-52.5-24.6l-192 160c-15.3 12.8-15.3 36.4 0 49.2zm256 0l192 160c20.6 17.2 52.5 2.8 52.5-24.6V96c0-27.4-31.9-41.8-52.5-24.6l-192 160c-15.3 12.8-15.3 36.4 0 49.2z" }, "child": [] }] })(props);
 }
@@ -264,6 +267,7 @@ var media = callable("media");
 var back = callable("back");
 var reload = callable("reload");
 var setOptions = callable("set_options");
+var snapshot = callable("snapshot");
 var fillStatus = callable("fill_status");
 var pointer = callable("pointer");
 var ensureAttached = async (url, tries = 8) => {
@@ -288,7 +292,7 @@ var withPage = async (url, action) => {
 // src/store.ts
 var import_react3 = __toESM(require_react(), 1);
 var STORAGE_KEY = "couch-pip";
-var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "nudgeX", "nudgeY"];
+var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "nudgeX", "nudgeY", "safe"];
 var defaults = {
   viewMode: 3 /* Closed */,
   previousMode: 2 /* Picture */,
@@ -303,7 +307,8 @@ var defaults = {
   autofill: true,
   nudgeX: 0,
   nudgeY: 0,
-  update: null
+  update: null,
+  safe: false
 };
 var load = () => {
   try {
@@ -472,22 +477,23 @@ var computeBounds = (s, obs) => {
   y = Math.min(Math.max(y, box.y), box.y + box.height - height);
   return { x: Math.round(x), y: Math.round(y), width, height };
 };
-var useAutoAttach = (url, autofill) => {
+var useAutoAttach = (url, autofill, safe) => {
   (0, import_react4.useEffect)(() => {
     let cancelled = false;
     (async () => {
-      await setOptions(autofill);
+      await setOptions(autofill, safe);
+      if (safe) return;
       const r = await ensureAttached(url, 20);
       if (!cancelled && !r.ok) console.warn("Couch PiP: couldn't connect to page", r.error);
     })();
     return () => {
       cancelled = true;
     };
-  }, [url, autofill]);
+  }, [url, autofill, safe]);
 };
 var Pip = () => {
   const s = useStore();
-  useAutoAttach(s.url, s.autofill);
+  useAutoAttach(s.url, s.autofill, s.safe);
   const obs = useObstructions();
   const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0, keyboard: false } : obs);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels });
@@ -853,7 +859,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.3.0" : "0.0.0";
+var VERSION = true ? "0.3.1" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -974,7 +980,8 @@ var MediaRow = () => {
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.DialogButton, { style: iconButton, onClick: () => act("toggle"), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaPlay, {}) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.DialogButton, { style: iconButton, onClick: () => act("seek", 10), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaForward, {}) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.DialogButton, { style: iconButton, onClick: () => act("volume", -0.1), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaVolumeDown, {}) }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.DialogButton, { style: iconButton, onClick: () => act("volume", 0.1), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaVolumeUp, {}) })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.DialogButton, { style: iconButton, onClick: () => act("volume", 0.1), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaVolumeUp, {}) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.DialogButton, { style: iconButton, onClick: () => act("fill"), children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaExpand, {}) })
     ] }) }),
     msg && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: 12, opacity: 0.7, padding: "0 4px" }, children: msg }) })
   ] });
@@ -982,6 +989,7 @@ var MediaRow = () => {
 var Diagnostics = () => {
   const s = useStore();
   const [targets, setTargets] = (0, import_react7.useState)("");
+  const [shot, setShot] = (0, import_react7.useState)("");
   const screen = getScreen();
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.PanelSection, { title: "Diagnostics", children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { fontSize: 12, lineHeight: 1.5, wordBreak: "break-all" }, children: [
@@ -1031,6 +1039,33 @@ var Diagnostics = () => {
           setTargets(r.ok ? JSON.stringify(r.result, null, 1) : r.error ?? "error");
         },
         children: "Check video fill"
+      }
+    ) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ButtonItem,
+      {
+        layout: "below",
+        description: "Shows what the browser itself is drawing in the picture",
+        onClick: async () => {
+          setShot("");
+          setTargets("Taking snapshot\u2026");
+          const r = await withPage(getState().url, () => snapshot());
+          if (r.ok && r.result) {
+            setShot(r.result);
+            setTargets("");
+          } else setTargets(r.error ?? "Snapshot failed");
+        },
+        children: "Snapshot page"
+      }
+    ) }),
+    shot && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("img", { src: shot, style: { width: "100%", border: "1px solid rgba(255,255,255,0.3)" } }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ToggleField,
+      {
+        label: "Safe mode",
+        description: "Don't change the page at all (no scrollbar hiding, fill or mouse). Reloads the page.",
+        checked: s.safe,
+        onChange: (v) => setState({ safe: v })
       }
     ) }),
     targets && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: 11, whiteSpace: "pre-wrap", wordBreak: "break-all", opacity: 0.8 }, children: targets }) })

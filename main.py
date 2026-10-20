@@ -176,9 +176,11 @@ class CDPSession:
         self.reader_task = asyncio.ensure_future(self._read_loop())
 
     @classmethod
-    async def open(cls, target: dict):
+    async def open(cls, target: dict, focus: bool = True):
         ws = await WebSocket.connect(target["webSocketDebuggerUrl"])
         session = cls(target["id"], ws)
+        if not focus:
+            return session
         # Make the page believe it has focus, so keyboard input and
         # "is the tab visible" checks behave while the game is in front.
         try:
@@ -370,7 +372,8 @@ JS_HELPER = r"""
     .__cpip_fill { position: fixed !important; inset: 0 !important; left: 0 !important; top: 0 !important;
       width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important;
       min-width: 0 !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important;
-      transform: none !important; z-index: 2147483646 !important; background: #000 !important; }
+      transform: none !important; z-index: 2147483640 !important; background: #000 !important; }
+    #__cpip_shield { position: fixed; inset: 0; z-index: 2147483645; pointer-events: none; background: rgba(0,0,0,0.004); }
     video.__cpip_fill, .__cpip_fill video { width: 100% !important; height: 100% !important; left: 0 !important;
       top: 0 !important; object-fit: contain !important; }
     .__cpip_hide { visibility: hidden !important; }
@@ -411,6 +414,8 @@ JS_HELPER = r"""
     .sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0] || null;
 
   const unfill = () => {
+    const sh = document.getElementById('__cpip_shield');
+    if (sh) sh.remove();
     if (state.el) state.el.classList.remove('__cpip_fill');
     state.hidden.forEach((e) => e.classList.remove('__cpip_hide'));
     state.hidden = [];
@@ -455,6 +460,12 @@ JS_HELPER = r"""
     state.el = el;
     state.video = video || el.querySelector('video') || (el.tagName === 'VIDEO' ? el : null);
     document.documentElement.classList.add('__cpip_filled');
+    // A nearly invisible layer over the video keeps the browser drawing the
+    // video itself instead of handing it to a display shortcut that Steam's
+    // view may not show.
+    const shield = document.createElement('div');
+    shield.id = '__cpip_shield';
+    document.documentElement.appendChild(shield);
   };
 
   // Fill the window with the player; if that doesn't work on this site, try
@@ -623,7 +634,7 @@ def _is_steam_page(url: str) -> bool:
 class Plugin:
     session: CDPSession | None = None
     lock: asyncio.Lock | None = None
-    opts: dict = {"autofill": True}
+    opts: dict = {"autofill": True, "safe": False}
     helper_script_id: str | None = None
 
     async def _main(self):
@@ -691,12 +702,13 @@ class Plugin:
             self.session.close()
         try:
             self.helper_script_id = None
-            self.session = await CDPSession.open(t)
+            self.session = await CDPSession.open(t, focus=not self.opts.get("safe"))
         except Exception as e:
             self.session = None
             return {"ok": False, "error": f"Couldn't connect to page: {e}"}
         log.info(f"attached to {t.get('url')} ({t['id']})")
-        await self._install_helper()
+        if not self.opts.get("safe"):
+            await self._install_helper()
         return {"ok": True, "id": t["id"], "url": t.get("url"), "title": t.get("title")}
 
     def _helper_source(self) -> str:
@@ -723,9 +735,26 @@ class Plugin:
         except Exception as e:
             log.warning(f"couldn't run page helper: {e}")
 
-    async def set_options(self, autofill: bool):
-        self.opts = {**self.opts, "autofill": bool(autofill)}
-        if self.session and self.session.alive:
+    async def set_options(self, autofill: bool, safe: bool = False):
+        was_safe = bool(self.opts.get("safe"))
+        self.opts = {**self.opts, "autofill": bool(autofill), "safe": bool(safe)}
+        if not (self.session and self.session.alive):
+            pass
+        elif safe and not was_safe:
+            # Remove every page change: stop injecting, undo, reload clean.
+            try:
+                if self.helper_script_id:
+                    await self.session.send("Page.removeScriptToEvaluateOnNewDocument", {"identifier": self.helper_script_id})
+                self.helper_script_id = None
+                await self.session.send("Emulation.setFocusEmulationEnabled", {"enabled": False})
+                await self.session.send("Page.reload", {})
+            except Exception as e:
+                log.warning(f"safe mode cleanup: {e}")
+        elif not safe:
+            try:
+                await self.session.send("Emulation.setFocusEmulationEnabled", {"enabled": True})
+            except Exception:
+                pass
             await self._install_helper()
         return {"ok": True, "opts": self.opts}
 
@@ -844,3 +873,18 @@ class Plugin:
     async def fill_status(self):
         """What the page helper sees, for the diagnostics panel."""
         return await self._safe(self._eval("window.__cpip ? window.__cpip.status() : null"))
+
+    async def snapshot(self):
+        """A picture of what the browser itself is drawing for the page."""
+
+        async def run():
+            try:
+                await self._send("Page.enable")
+            except Exception:
+                pass
+            res = await self.session.send(
+                "Page.captureScreenshot", {"format": "jpeg", "quality": 60}, timeout=8
+            )
+            return "data:image/jpeg;base64," + res["data"]
+
+        return await self._safe(run())

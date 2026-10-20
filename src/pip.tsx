@@ -165,23 +165,24 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number; keyboar
 };
 
 /** Connect to the page as soon as it loads, so scrollbars hide and auto-fill works. */
-const useAutoAttach = (url: string, autofill: boolean) => {
+const useAutoAttach = (url: string, autofill: boolean, safe: boolean) => {
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            await backend.setOptions(autofill);
+            await backend.setOptions(autofill, safe);
+            if (safe) return; // safe mode: only connect when the remote is used
             const r = await backend.ensureAttached(url, 20);
             if (!cancelled && !r.ok) console.warn("Couch PiP: couldn't connect to page", r.error);
         })();
         return () => {
             cancelled = true;
         };
-    }, [url, autofill]);
+    }, [url, autofill, safe]);
 };
 
 const Pip = () => {
     const s = useStore();
-    useAutoAttach(s.url, s.autofill);
+    useAutoAttach(s.url, s.autofill, s.safe);
     const obs = useObstructions();
     const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0, keyboard: false } : obs);
     return <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />;

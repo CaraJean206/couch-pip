@@ -49,6 +49,7 @@ declare module "react-icons/fa" {
     export const FaForward: any;
     export const FaVolumeDown: any;
     export const FaVolumeUp: any;
+    export const FaExpand: any;
 }
 
 declare namespace JSX {
