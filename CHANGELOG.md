@@ -3,6 +3,14 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.5: Picture reaches the bottom of the screen
+
+- The picture couldn't go lower than about the middle of the TV. The plugin
+  kept the bottom 45% of the screen clear for Steam's on-screen keyboard
+  whenever the keyboard was loaded, and on the Steam Machine it's loaded all the
+  time, even when hidden. The picture is already hidden whenever you type, so
+  that space is no longer reserved.
+
 ## 0.4.4: Position sliders cover the whole screen
 
 - The left/right and up/down sliders now go from one edge of the screen to the

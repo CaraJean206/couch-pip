@@ -427,8 +427,7 @@ var getObstructions = () => {
     const win = trees.find((t) => t?.id === id)?.m_Root?.m_element?.ownerDocument?.defaultView;
     return win && !win.document.hidden ? win.outerWidth : 0;
   };
-  const keyboard = !!trees.find((t) => t?.id === "virtual keyboard");
-  return { nav: widthOf("MainNavMenuContainer"), qam: widthOf("QuickAccess-NA"), keyboard };
+  return { nav: widthOf("MainNavMenuContainer"), qam: widthOf("QuickAccess-NA") };
 };
 var useObstructions = () => {
   const [state2, setState2] = (0, import_react4.useState)(getObstructions());
@@ -436,7 +435,7 @@ var useObstructions = () => {
     const timer = setInterval(() => {
       setState2((cur) => {
         const next = getObstructions();
-        return next.nav === cur.nav && next.qam === cur.qam && next.keyboard === cur.keyboard ? cur : next;
+        return next.nav === cur.nav && next.qam === cur.qam ? cur : next;
       });
     }, 250);
     return () => clearInterval(timer);
@@ -449,7 +448,7 @@ var computeBounds = (s, obs) => {
     x: obs.nav,
     y: 0,
     width: screen.width - obs.nav - obs.qam,
-    height: screen.height - (obs.keyboard ? screen.height * 0.45 : 0)
+    height: screen.height
   };
   if (s.viewMode === 4 /* Remote */) {
     const m = Math.round(screen.height * 0.03);
@@ -493,7 +492,7 @@ var Pip = () => {
   const s = useStore();
   useAutoAttach(s.url, s.autofill, s.safe);
   const obs = useObstructions();
-  const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0, keyboard: false } : obs);
+  const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0 } : obs);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels });
 };
 var PipOuter = () => {
@@ -1062,7 +1061,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.4" : "0.0.0";
+var VERSION = true ? "0.4.5" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);

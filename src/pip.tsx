@@ -86,8 +86,10 @@ const getObstructions = () => {
         const win = trees.find((t: any) => t?.id === id)?.m_Root?.m_element?.ownerDocument?.defaultView;
         return win && !win.document.hidden ? win.outerWidth : 0;
     };
-    const keyboard = !!trees.find((t: any) => t?.id === "virtual keyboard");
-    return { nav: widthOf("MainNavMenuContainer"), qam: widthOf("QuickAccess-NA"), keyboard };
+    // The on-screen keyboard isn't avoided: the picture is hidden whenever the
+    // plugin asks you to type, and Steam can keep the keyboard loaded while it's
+    // not showing, which would wrongly block the bottom of the screen.
+    return { nav: widthOf("MainNavMenuContainer"), qam: widthOf("QuickAccess-NA") };
 };
 
 const useObstructions = () => {
@@ -96,7 +98,7 @@ const useObstructions = () => {
         const timer = setInterval(() => {
             setState((cur) => {
                 const next = getObstructions();
-                return next.nav === cur.nav && next.qam === cur.qam && next.keyboard === cur.keyboard ? cur : next;
+                return next.nav === cur.nav && next.qam === cur.qam ? cur : next;
             });
         }, 250);
         return () => clearInterval(timer);
@@ -104,14 +106,14 @@ const useObstructions = () => {
     return state;
 };
 
-export const computeBounds = (s: State, obs: { nav: number; qam: number; keyboard: boolean }): Rect => {
+export const computeBounds = (s: State, obs: { nav: number; qam: number }): Rect => {
     const screen = getScreen();
-    // Space not covered by Steam's menus or the on-screen keyboard.
+    // Space not covered by Steam's side menu or Quick Access Menu.
     const area = {
         x: obs.nav,
         y: 0,
         width: screen.width - obs.nav - obs.qam,
-        height: screen.height - (obs.keyboard ? screen.height * 0.45 : 0),
+        height: screen.height,
     };
 
     if (s.viewMode === ViewMode.Remote) {
@@ -168,7 +170,7 @@ const Pip = () => {
     const s = useStore();
     useAutoAttach(s.url, s.autofill, s.safe);
     const obs = useObstructions();
-    const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0, keyboard: false } : obs);
+    const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0 } : obs);
     return <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />;
 };
 
