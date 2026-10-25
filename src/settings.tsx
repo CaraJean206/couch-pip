@@ -8,7 +8,7 @@ import { lastBounds } from "./pip";
 import { findSteamInput, showRemote } from "./remote";
 import { VERSION, checkForUpdate, installUpdate } from "./updates";
 import { getState, setState, useStore } from "./store";
-import { MARGINS, POSITION_LABELS, Position, ViewMode, getScreen, hostOf } from "./util";
+import { MARGINS, POSITION_LABELS, POSITION_XY, Position, ViewMode, getScreen, hostOf, placeOf, spotAt } from "./util";
 
 const nearestIndex = (list: { value: number }[], v: number) =>
     list.reduce((best, item, i) => (Math.abs(item.value - v) < Math.abs(list[best].value - v) ? i : best), 0);
@@ -21,11 +21,13 @@ const GRID: Position[][] = [
 ];
 
 const PositionGrid = () => {
-    const { position } = useStore();
+    const s = useStore();
+    const [fx, fy] = placeOf(s);
+    const current = spotAt(fx, fy);
     return (
         <div style={{ width: "100%" }}>
             <div style={{ fontSize: 14, marginBottom: 6 }}>
-                Position: <b>{POSITION_LABELS[position]}</b>
+                Position: <b>{current !== null ? POSITION_LABELS[current] : "Custom"}</b>
             </div>
             <Focusable
                 flow-children="grid"
@@ -43,17 +45,17 @@ const PositionGrid = () => {
                 {GRID.flat().map((p) => (
                     <DialogButton
                         key={p}
-                        onClick={() => setState({ position: p, nudgeX: 0, nudgeY: 0 })}
+                        onClick={() => setState({ position: p, posX: POSITION_XY[p][0], posY: POSITION_XY[p][1] })}
                         style={{
                             minWidth: 0,
                             minHeight: 0,
                             height: "100%",
                             padding: 0,
-                            background: p === position ? "#1a9fff" : undefined,
-                            color: p === position ? "#fff" : undefined,
+                            background: p === current ? "#1a9fff" : undefined,
+                            color: p === current ? "#fff" : undefined,
                         }}
                     >
-                        {p === position ? "■" : ""}
+                        {p === current ? "■" : ""}
                     </DialogButton>
                 ))}
             </Focusable>
@@ -63,6 +65,7 @@ const PositionGrid = () => {
         </div>
     );
 };
+
 const iconButton = { minWidth: 0, padding: "10px 0", flex: 1, display: "flex", justifyContent: "center" };
 
 const MediaRow = () => {
@@ -362,28 +365,28 @@ export const Settings = () => {
                     </PanelSectionRow>
                     <PanelSectionRow>
                         <SliderField
-                            label="Fine tune: left / right"
-                            value={Math.round((s.nudgeX ?? 0) * 100)}
-                            min={-30}
-                            max={30}
+                            label="Left ↔ right"
+                            description="0% = left edge, 100% = right edge"
+                            value={Math.round(placeOf(s)[0] * 100)}
+                            min={0}
+                            max={100}
                             step={1}
                             showValue
                             valueSuffix="%"
-                            resetValue={0}
-                            onChange={(v: number) => setState({ nudgeX: v / 100 })}
+                            onChange={(v: number) => setState({ posX: v / 100, posY: placeOf(getState())[1] })}
                         />
                     </PanelSectionRow>
                     <PanelSectionRow>
                         <SliderField
-                            label="Fine tune: up / down"
-                            value={Math.round((s.nudgeY ?? 0) * 100)}
-                            min={-30}
-                            max={30}
+                            label="Up ↕ down"
+                            description="0% = top edge, 100% = bottom edge"
+                            value={Math.round(placeOf(s)[1] * 100)}
+                            min={0}
+                            max={100}
                             step={1}
                             showValue
                             valueSuffix="%"
-                            resetValue={0}
-                            onChange={(v: number) => setState({ nudgeY: v / 100 })}
+                            onChange={(v: number) => setState({ posY: v / 100, posX: placeOf(getState())[0] })}
                         />
                     </PanelSectionRow>
                 </PanelSection>

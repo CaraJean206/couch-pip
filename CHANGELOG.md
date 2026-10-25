@@ -3,6 +3,15 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.4: Position sliders cover the whole screen
+
+- The left/right and up/down sliders now go from one edge of the screen to the
+  other (0% = left or top, 100% = right or bottom). Before, they only nudged
+  the picture a little way from the chosen grid spot, so it couldn't reach the
+  bottom or the far side.
+- Picking a grid spot moves the sliders to match. Checked at 1080p, 1440p and
+  4K, including 4K with Steam's interface scaled up.
+
 ## 0.4.3
 
 - Build fix: the bundled file no longer contains paths from the build machine,

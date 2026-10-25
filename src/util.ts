@@ -33,6 +33,36 @@ export const POSITION_LABELS: Record<Position, string> = {
     [Position.Center]: "Center",
 };
 
+/** Where each grid spot sits, as 0..1 of the free space (0 = left/top, 1 = right/bottom). */
+export const POSITION_XY: Record<Position, [number, number]> = {
+    [Position.TopLeft]: [0, 0],
+    [Position.Top]: [0.5, 0],
+    [Position.TopRight]: [1, 0],
+    [Position.Left]: [0, 0.5],
+    [Position.Center]: [0.5, 0.5],
+    [Position.Right]: [1, 0.5],
+    [Position.BottomLeft]: [0, 1],
+    [Position.Bottom]: [0.5, 1],
+    [Position.BottomRight]: [1, 1],
+};
+
+const clamp01 = (v: unknown, fallback: number) =>
+    typeof v === "number" && isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback;
+
+/** The picture's place as 0..1 across and down the free space. */
+export const placeOf = (s: { position: Position; posX?: number | null; posY?: number | null }): [number, number] => {
+    const [gx, gy] = POSITION_XY[s.position] ?? [1, 0];
+    return [clamp01(s.posX, gx), clamp01(s.posY, gy)];
+};
+
+/** The grid spot matching a place, if it's exactly on one. */
+export const spotAt = (x: number, y: number): Position | null => {
+    for (const [p, [gx, gy]] of Object.entries(POSITION_XY)) {
+        if (Math.abs(gx - x) < 0.005 && Math.abs(gy - y) < 0.005) return Number(p) as Position;
+    }
+    return null;
+};
+
 // Pictures are 16:9.
 export const ASPECT = 9 / 16;
 

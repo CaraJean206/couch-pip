@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import * as backend from "./backend";
 import { State, useStore } from "./store";
-import { Position, ViewMode, ASPECT, getScreen } from "./util";
+import { ViewMode, ASPECT, getScreen, placeOf } from "./util";
 
 // Ask Steam to keep its UI layer drawn over the game (like a notification
 // toast) without taking the controller away from the game.
@@ -141,29 +141,10 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number; keyboar
         width = Math.round(height / ASPECT);
     }
 
-    let x = box.x;
-    let y = box.y;
-    const right = box.x + box.width - width;
-    const bottom = box.y + box.height - height;
-    const centerX = box.x + (box.width - width) / 2;
-    const centerY = box.y + (box.height - height) / 2;
-
-    switch (s.position) {
-        case Position.Top: x = centerX; break;
-        case Position.TopRight: x = right; break;
-        case Position.Right: x = right; y = centerY; break;
-        case Position.BottomRight: x = right; y = bottom; break;
-        case Position.Bottom: x = centerX; y = bottom; break;
-        case Position.BottomLeft: y = bottom; break;
-        case Position.Left: y = centerY; break;
-        case Position.TopLeft: break;
-        case Position.Center: x = centerX; y = centerY; break;
-    }
-    // Fine tuning, kept inside the free space.
-    x += (s.nudgeX ?? 0) * screen.width;
-    y += (s.nudgeY ?? 0) * screen.height;
-    x = Math.min(Math.max(x, box.x), box.x + box.width - width);
-    y = Math.min(Math.max(y, box.y), box.y + box.height - height);
+    // Place anywhere in the free space: 0 = left/top edge, 1 = right/bottom edge.
+    const [fx, fy] = placeOf(s);
+    const x = box.x + fx * Math.max(0, box.width - width);
+    const y = box.y + fy * Math.max(0, box.height - height);
     return { x: Math.round(x), y: Math.round(y), width, height };
 };
 

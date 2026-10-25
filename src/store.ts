@@ -18,15 +18,15 @@ export interface State {
     useDevicePixels: boolean;
     showDiagnostics: boolean;
     autofill: boolean;
-    nudgeX: number; // share of screen width, + moves right
-    nudgeY: number; // share of screen height, + moves down
+    posX: number | null; // 0 = left edge .. 1 = right edge of the free space (null: use the grid spot)
+    posY: number | null; // 0 = top edge .. 1 = bottom edge
     update: { version: string; zip: string; sha256?: string } | null;
     safe: boolean;
     remoteGuideTop: number | null; // where the remote's guide starts on screen (CSS px)
 }
 
 const STORAGE_KEY = "couch-pip";
-const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "nudgeX", "nudgeY", "safe"];
+const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe"];
 
 const defaults: State = {
     viewMode: ViewMode.Closed,
@@ -40,8 +40,8 @@ const defaults: State = {
     useDevicePixels: false,
     showDiagnostics: false,
     autofill: true,
-    nudgeX: 0,
-    nudgeY: 0,
+    posX: null,
+    posY: null,
     update: null,
     safe: false,
     remoteGuideTop: null,

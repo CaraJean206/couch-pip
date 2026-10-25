@@ -19,7 +19,8 @@ see [Credits](#credits).
 - **Picture-in-picture over games.** The video stays on top of your game while
   the controller keeps working in the game.
 - **Sized for TVs.** Works at 1080p, 1440p and 4K. Nine positions (corners,
-  side middles, center), fine-tune sliders, and a size slider from 10% to 80%
+  side middles, center), left/right and up/down sliders that reach every edge,
+  and a size slider from 10% to 80%
   of the screen.
 - **Controller remote.** Move a highlight around any website with the D-pad to
   sign in, search and pick videos. Type with the on-screen keyboard.

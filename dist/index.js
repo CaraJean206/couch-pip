@@ -207,6 +207,28 @@ var POSITION_LABELS = {
   [6 /* Left */]: "Left",
   [8 /* Center */]: "Center"
 };
+var POSITION_XY = {
+  [7 /* TopLeft */]: [0, 0],
+  [0 /* Top */]: [0.5, 0],
+  [1 /* TopRight */]: [1, 0],
+  [6 /* Left */]: [0, 0.5],
+  [8 /* Center */]: [0.5, 0.5],
+  [2 /* Right */]: [1, 0.5],
+  [5 /* BottomLeft */]: [0, 1],
+  [4 /* Bottom */]: [0.5, 1],
+  [3 /* BottomRight */]: [1, 1]
+};
+var clamp01 = (v, fallback) => typeof v === "number" && isFinite(v) ? Math.min(1, Math.max(0, v)) : fallback;
+var placeOf = (s) => {
+  const [gx, gy] = POSITION_XY[s.position] ?? [1, 0];
+  return [clamp01(s.posX, gx), clamp01(s.posY, gy)];
+};
+var spotAt = (x, y) => {
+  for (const [p, [gx, gy]] of Object.entries(POSITION_XY)) {
+    if (Math.abs(gx - x) < 5e-3 && Math.abs(gy - y) < 5e-3) return Number(p);
+  }
+  return null;
+};
 var ASPECT = 9 / 16;
 var MARGINS = [
   { label: "0", value: 0 },
@@ -299,7 +321,7 @@ var withPage = async (url, action) => {
 // src/store.ts
 var import_react3 = __toESM(require_react(), 1);
 var STORAGE_KEY = "couch-pip";
-var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "nudgeX", "nudgeY", "safe"];
+var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe"];
 var defaults = {
   viewMode: 3 /* Closed */,
   previousMode: 2 /* Picture */,
@@ -312,8 +334,8 @@ var defaults = {
   useDevicePixels: false,
   showDiagnostics: false,
   autofill: true,
-  nudgeX: 0,
-  nudgeY: 0,
+  posX: null,
+  posY: null,
   update: null,
   safe: false,
   remoteGuideTop: null
@@ -448,48 +470,9 @@ var computeBounds = (s, obs) => {
     height = box.height;
     width = Math.round(height / ASPECT);
   }
-  let x = box.x;
-  let y = box.y;
-  const right = box.x + box.width - width;
-  const bottom = box.y + box.height - height;
-  const centerX = box.x + (box.width - width) / 2;
-  const centerY = box.y + (box.height - height) / 2;
-  switch (s.position) {
-    case 0 /* Top */:
-      x = centerX;
-      break;
-    case 1 /* TopRight */:
-      x = right;
-      break;
-    case 2 /* Right */:
-      x = right;
-      y = centerY;
-      break;
-    case 3 /* BottomRight */:
-      x = right;
-      y = bottom;
-      break;
-    case 4 /* Bottom */:
-      x = centerX;
-      y = bottom;
-      break;
-    case 5 /* BottomLeft */:
-      y = bottom;
-      break;
-    case 6 /* Left */:
-      y = centerY;
-      break;
-    case 7 /* TopLeft */:
-      break;
-    case 8 /* Center */:
-      x = centerX;
-      y = centerY;
-      break;
-  }
-  x += (s.nudgeX ?? 0) * screen.width;
-  y += (s.nudgeY ?? 0) * screen.height;
-  x = Math.min(Math.max(x, box.x), box.x + box.width - width);
-  y = Math.min(Math.max(y, box.y), box.y + box.height - height);
+  const [fx, fy] = placeOf(s);
+  const x = box.x + fx * Math.max(0, box.width - width);
+  const y = box.y + fy * Math.max(0, box.height - height);
   return { x: Math.round(x), y: Math.round(y), width, height };
 };
 var useAutoAttach = (url, autofill, safe) => {
@@ -1079,7 +1062,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.3" : "0.0.0";
+var VERSION = true ? "0.4.4" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1149,11 +1132,13 @@ var GRID = [
   [5 /* BottomLeft */, 4 /* Bottom */, 3 /* BottomRight */]
 ];
 var PositionGrid = () => {
-  const { position } = useStore();
+  const s = useStore();
+  const [fx, fy] = placeOf(s);
+  const current = spotAt(fx, fy);
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { width: "100%" }, children: [
     /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { style: { fontSize: 14, marginBottom: 6 }, children: [
       "Position: ",
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("b", { children: POSITION_LABELS[position] })
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("b", { children: current !== null ? POSITION_LABELS[current] : "Custom" })
     ] }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
       import_ui5.Focusable,
@@ -1172,16 +1157,16 @@ var PositionGrid = () => {
         children: GRID.flat().map((p) => /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
           import_ui5.DialogButton,
           {
-            onClick: () => setState({ position: p, nudgeX: 0, nudgeY: 0 }),
+            onClick: () => setState({ position: p, posX: POSITION_XY[p][0], posY: POSITION_XY[p][1] }),
             style: {
               minWidth: 0,
               minHeight: 0,
               height: "100%",
               padding: 0,
-              background: p === position ? "#1a9fff" : void 0,
-              color: p === position ? "#fff" : void 0
+              background: p === current ? "#1a9fff" : void 0,
+              color: p === current ? "#fff" : void 0
             },
-            children: p === position ? "\u25A0" : ""
+            children: p === current ? "\u25A0" : ""
           },
           p
         ))
@@ -1442,29 +1427,29 @@ var Settings = () => {
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
         import_ui5.SliderField,
         {
-          label: "Fine tune: left / right",
-          value: Math.round((s.nudgeX ?? 0) * 100),
-          min: -30,
-          max: 30,
+          label: "Left \u2194 right",
+          description: "0% = left edge, 100% = right edge",
+          value: Math.round(placeOf(s)[0] * 100),
+          min: 0,
+          max: 100,
           step: 1,
           showValue: true,
           valueSuffix: "%",
-          resetValue: 0,
-          onChange: (v) => setState({ nudgeX: v / 100 })
+          onChange: (v) => setState({ posX: v / 100, posY: placeOf(getState())[1] })
         }
       ) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
         import_ui5.SliderField,
         {
-          label: "Fine tune: up / down",
-          value: Math.round((s.nudgeY ?? 0) * 100),
-          min: -30,
-          max: 30,
+          label: "Up \u2195 down",
+          description: "0% = top edge, 100% = bottom edge",
+          value: Math.round(placeOf(s)[1] * 100),
+          min: 0,
+          max: 100,
           step: 1,
           showValue: true,
           valueSuffix: "%",
-          resetValue: 0,
-          onChange: (v) => setState({ nudgeY: v / 100 })
+          onChange: (v) => setState({ posY: v / 100, posX: placeOf(getState())[0] })
         }
       ) })
     ] }),
