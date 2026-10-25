@@ -60,7 +60,7 @@ const PositionGrid = () => {
                 ))}
             </Focusable>
             <div style={{ fontSize: 11, opacity: 0.6, marginTop: 4 }}>
-                While this menu is open the picture moves left to stay visible.
+                If the picture would be under this menu, it slides aside until you close the menu.
             </div>
         </div>
     );

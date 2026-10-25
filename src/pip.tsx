@@ -131,22 +131,37 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number }): Rect
 
     if (s.viewMode === ViewMode.Expand) return box;
 
+    // The picture's real place uses the whole screen, so it doesn't move when
+    // Steam's menus open and close.
+    const full = { x: margin, y: margin, width: screen.width - margin * 2, height: screen.height - margin * 2 };
+
     let width = Math.round(screen.width * s.size);
     let height = Math.round(width * ASPECT);
-    // Never bigger than the free space.
-    if (width > box.width) {
-        width = box.width;
+    // Never bigger than the screen.
+    if (width > full.width) {
+        width = full.width;
         height = Math.round(width * ASPECT);
     }
-    if (height > box.height) {
-        height = box.height;
+    if (height > full.height) {
+        height = full.height;
         width = Math.round(height / ASPECT);
     }
 
-    // Place anywhere in the free space: 0 = left/top edge, 1 = right/bottom edge.
+    // Place anywhere on screen: 0 = left/top edge, 1 = right/bottom edge.
     const [fx, fy] = placeOf(s);
-    const x = box.x + fx * Math.max(0, box.width - width);
-    const y = box.y + fy * Math.max(0, box.height - height);
+    let x = full.x + fx * Math.max(0, full.width - width);
+    const y = full.y + fy * Math.max(0, full.height - height);
+
+    // Only if Steam's Quick Access Menu or side menu would cover the picture,
+    // slide it sideways just far enough to stay visible while the menu is open.
+    if (obs.qam > 0) {
+        const limit = screen.width - obs.qam - margin;
+        if (x + width > limit) x = Math.max(margin, limit - width);
+    }
+    if (obs.nav > 0) {
+        const limit = obs.nav + margin;
+        if (x < limit) x = Math.min(limit, Math.max(margin, screen.width - obs.qam - margin - width));
+    }
     return { x: Math.round(x), y: Math.round(y), width, height };
 };
 

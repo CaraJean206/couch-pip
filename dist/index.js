@@ -459,19 +459,28 @@ var computeBounds = (s, obs) => {
   const margin = Math.round(screen.height * (s.viewMode === 1 /* Expand */ ? 0.04 : s.margin));
   const box = { x: area.x + margin, y: area.y + margin, width: area.width - margin * 2, height: area.height - margin * 2 };
   if (s.viewMode === 1 /* Expand */) return box;
+  const full = { x: margin, y: margin, width: screen.width - margin * 2, height: screen.height - margin * 2 };
   let width = Math.round(screen.width * s.size);
   let height = Math.round(width * ASPECT);
-  if (width > box.width) {
-    width = box.width;
+  if (width > full.width) {
+    width = full.width;
     height = Math.round(width * ASPECT);
   }
-  if (height > box.height) {
-    height = box.height;
+  if (height > full.height) {
+    height = full.height;
     width = Math.round(height / ASPECT);
   }
   const [fx, fy] = placeOf(s);
-  const x = box.x + fx * Math.max(0, box.width - width);
-  const y = box.y + fy * Math.max(0, box.height - height);
+  let x = full.x + fx * Math.max(0, full.width - width);
+  const y = full.y + fy * Math.max(0, full.height - height);
+  if (obs.qam > 0) {
+    const limit = screen.width - obs.qam - margin;
+    if (x + width > limit) x = Math.max(margin, limit - width);
+  }
+  if (obs.nav > 0) {
+    const limit = obs.nav + margin;
+    if (x < limit) x = Math.min(limit, Math.max(margin, screen.width - obs.qam - margin - width));
+  }
   return { x: Math.round(x), y: Math.round(y), width, height };
 };
 var useAutoAttach = (url, autofill, safe) => {
@@ -1061,7 +1070,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.5" : "0.0.0";
+var VERSION = true ? "0.4.6" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1171,7 +1180,7 @@ var PositionGrid = () => {
         ))
       }
     ),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: 11, opacity: 0.6, marginTop: 4 }, children: "While this menu is open the picture moves left to stay visible." })
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: 11, opacity: 0.6, marginTop: 4 }, children: "If the picture would be under this menu, it slides aside until you close the menu." })
   ] });
 };
 var iconButton = { minWidth: 0, padding: "10px 0", flex: 1, display: "flex", justifyContent: "center" };

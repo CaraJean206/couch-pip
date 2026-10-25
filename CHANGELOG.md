@@ -3,6 +3,13 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.6: Picture stays put when the menu closes
+
+- While the Quick Access Menu was open, every position was squeezed into the
+  space left of the menu, so the picture jumped right when the menu closed.
+  Now the picture stays exactly where it will end up, and only slides aside
+  (just far enough) if it would be under the menu.
+
 ## 0.4.5: Picture reaches the bottom of the screen
 
 - The picture couldn't go lower than about the middle of the TV. The plugin
