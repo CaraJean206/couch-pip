@@ -387,6 +387,25 @@ JS_HELPER = r"""
   }
 
   const OPTS = __OPTS__;
+
+  // Transparency: make the whole page see-through (the browser's own
+  // background is made transparent from the backend).
+  const applyLook = () => {
+    const root = document.documentElement;
+    if (!root) return;
+    let s = document.getElementById('__cpip_look');
+    const op = Math.min(1, Math.max(0.2, Number(OPTS.opacity) || 1));
+    if (op >= 0.999) { if (s) s.remove(); return; }
+    if (!s) {
+      s = document.createElement('style');
+      s.id = '__cpip_look';
+      (document.head || root).appendChild(s);
+    }
+    s.textContent = `html { opacity: ${op} !important; }`;
+  };
+  applyLook();
+  document.addEventListener('DOMContentLoaded', applyLook);
+
   if (window.__cpip) { Object.assign(window.__cpip.opts, OPTS); return 'updated'; }
 
   const css = `
@@ -707,7 +726,7 @@ def _is_steam_page(url: str) -> bool:
 class Plugin:
     session: CDPSession | None = None
     lock: asyncio.Lock | None = None
-    opts: dict = {"autofill": True, "safe": False}
+    opts: dict = {"autofill": True, "safe": False, "dark": "prefer", "opacity": 1.0}
     helper_script_id: str | None = None
 
     async def _main(self):
@@ -782,12 +801,36 @@ class Plugin:
             self.session = None
             return {"ok": False, "error": f"Couldn't connect to page: {e}"}
         log.info(f"attached to {urlparse(t.get('url', '')).hostname or '?'}")
+        await self._apply_view_settings()
         if not self.opts.get("safe"):
             await self._install_helper()
         return {"ok": True, "id": t["id"], "url": t.get("url"), "title": t.get("title")}
 
     def _helper_source(self) -> str:
         return JS_HELPER.replace("__OPTS__", json.dumps(self.opts))
+
+    async def _apply_view_settings(self):
+        """Dark mode and see-through background. These are browser settings for
+        this page only, so they also apply in Safe mode."""
+        if not self.session or not self.session.alive:
+            return
+        dark = self.opts.get("dark", "off")
+        opacity = float(self.opts.get("opacity", 1.0))
+        steps = [
+            # Tell sites you prefer dark mode, so the ones with a dark theme use it.
+            ("Emulation.setEmulatedMedia",
+             {"features": [{"name": "prefers-color-scheme", "value": "dark" if dark != "off" else ""}]}),
+            # Force dark: the browser darkens sites that have no dark theme.
+            ("Emulation.setAutoDarkModeOverride", {"enabled": True} if dark == "force" else {}),
+            # Transparent background behind the page, for the transparency slider.
+            ("Emulation.setDefaultBackgroundColorOverride",
+             {"color": {"r": 0, "g": 0, "b": 0, "a": 0}} if opacity < 0.999 else {}),
+        ]
+        for method, params in steps:
+            try:
+                await self.session.send(method, params)
+            except Exception as e:
+                log.warning(f"{method} unavailable: {e}")
 
     async def _install_helper(self):
         """Run the page helper now and on every page this view loads later."""
@@ -810,9 +853,16 @@ class Plugin:
         except Exception as e:
             log.warning(f"couldn't run page helper: {e}")
 
-    async def set_options(self, autofill: bool, safe: bool = False):
+    async def set_options(self, autofill: bool, safe: bool = False, dark: str = "prefer", opacity: float = 1.0):
         was_safe = bool(self.opts.get("safe"))
-        self.opts = {**self.opts, "autofill": bool(autofill), "safe": bool(safe)}
+        try:
+            opacity = min(1.0, max(0.2, float(opacity)))
+        except (TypeError, ValueError):
+            opacity = 1.0
+        self.opts = {**self.opts, "autofill": bool(autofill), "safe": bool(safe),
+                     "dark": dark if dark in ("off", "prefer", "force") else "off", "opacity": opacity}
+        if self.session and self.session.alive:
+            await self._apply_view_settings()
         if not (self.session and self.session.alive):
             pass
         elif safe and not was_safe:

@@ -3,6 +3,23 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.7: Dark mode, transparency, Google sign-in fix
+
+- **Google sign-in with two-step verification no longer gets stuck.** Google's
+  "use your phone or security key" pop-up belongs to the browser, so the remote
+  couldn't reach it. On Google's sign-in page, passkeys are now reported as
+  unavailable, so Google offers its other sign-in methods. Two-step
+  verification still applies. Contributed by
+  [JKutac](https://github.com/JKutac) in pull request #1. Thank you!
+- **Dark mode** (new **Look** section, on by default): sites that have a dark
+  theme use it. **Force dark on every site** also darkens sites without one.
+- **Transparency** slider: let your game show through the picture (0–70%).
+- **Close picture** moved up, right under the playback buttons, so it's easier
+  to find.
+- Diagnostics: **Browser view functions** lists what Steam's browser view
+  supports.
+- Checked again at the Steam Deck's screen size (1280×800), plus 1440p and 4K.
+
 ## 0.4.6: Picture stays put when the menu closes
 
 - While the Quick Access Menu was open, every position was squeezed into the

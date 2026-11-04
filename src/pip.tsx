@@ -46,12 +46,40 @@ export let lastBounds: Rect | null = null;
 
 const VIEW_NAME = "couchpip";
 
+let currentView: any = null;
+
+/** Functions Steam's browser view offers (diagnostics, e.g. for native transparency). */
+export const viewFunctions = () => {
+    const names = (o: any) => {
+        const out = new Set<string>();
+        for (let p = o; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
+            Object.getOwnPropertyNames(p).forEach((n) => {
+                try {
+                    if (typeof o[n] === "function" && n !== "constructor") out.add(n);
+                } catch {
+                    // ignore
+                }
+            });
+        }
+        return [...out].sort();
+    };
+    if (!currentView) return "Open the picture first.";
+    let browser: any = null;
+    try {
+        browser = currentView.GetBrowser();
+    } catch {
+        // ignore
+    }
+    return `View: ${names(currentView).join(", ")}\n\nBrowser: ${browser ? names(browser).join(", ") : "?"}`;
+};
+
 const Browser = ({ url, visible, bounds, devicePixels }: { url: string; visible: boolean; bounds: Rect; devicePixels: boolean }) => {
     useUIComposition?.(UIComposition.Notification);
 
     const [{ view, browser }] = useState(() => {
         const root: any = Router.WindowStore?.GamepadUIMainWindowInstance;
         const view = root.CreateBrowserView(VIEW_NAME);
+        currentView = view;
         return { view, browser: view.GetBrowser() };
     });
 
@@ -166,24 +194,26 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number }): Rect
 };
 
 /** Connect to the page as soon as it loads, so scrollbars hide and auto-fill works. */
-const useAutoAttach = (url: string, autofill: boolean, safe: boolean) => {
+const useAutoAttach = (url: string, autofill: boolean, safe: boolean, dark: string, opacity: number) => {
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            await backend.setOptions(autofill, safe);
-            if (safe) return; // safe mode: only connect when the remote is used
+            await backend.setOptions(autofill, safe, dark, opacity);
+            // Safe mode only connects when the remote is used, unless dark mode or
+            // transparency need the connection (they don't change the page itself).
+            if (safe && dark === "off" && opacity >= 0.999) return;
             const r = await backend.ensureAttached(url, 20);
             if (!cancelled && !r.ok) console.warn("Couch PiP: couldn't connect to page", r.error);
         })();
         return () => {
             cancelled = true;
         };
-    }, [url, autofill, safe]);
+    }, [url, autofill, safe, dark, opacity]);
 };
 
 const Pip = () => {
     const s = useStore();
-    useAutoAttach(s.url, s.autofill, s.safe);
+    useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity);
     const obs = useObstructions();
     const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0 } : obs);
     return <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />;

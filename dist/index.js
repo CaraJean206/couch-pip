@@ -177,6 +177,9 @@ function FaVolumeDown(props) {
 function FaTv(props) {
   return GenIcon({ "tag": "svg", "attr": { "viewBox": "0 0 640 512" }, "child": [{ "tag": "path", "attr": { "d": "M592 0H48A48 48 0 0 0 0 48v320a48 48 0 0 0 48 48h240v32H112a16 16 0 0 0-16 16v32a16 16 0 0 0 16 16h416a16 16 0 0 0 16-16v-32a16 16 0 0 0-16-16H352v-32h240a48 48 0 0 0 48-48V48a48 48 0 0 0-48-48zm-16 352H64V64h512z" }, "child": [] }] })(props);
 }
+function FaTimes(props) {
+  return GenIcon({ "tag": "svg", "attr": { "viewBox": "0 0 352 512" }, "child": [{ "tag": "path", "attr": { "d": "M242.72 256l100.07-100.07c12.28-12.28 12.28-32.19 0-44.48l-22.24-22.24c-12.28-12.28-32.19-12.28-44.48 0L176 189.28 75.93 89.21c-12.28-12.28-32.19-12.28-44.48 0L9.21 111.45c-12.28 12.28-12.28 32.19 0 44.48L109.28 256 9.21 356.07c-12.28 12.28-12.28 32.19 0 44.48l22.24 22.24c12.28 12.28 32.2 12.28 44.48 0L176 322.72l100.07 100.07c12.28 12.28 32.2 12.28 44.48 0l22.24-22.24c12.28-12.28 12.28-32.19 0-44.48L242.72 256z" }, "child": [] }] })(props);
+}
 function FaPlay(props) {
   return GenIcon({ "tag": "svg", "attr": { "viewBox": "0 0 448 512" }, "child": [{ "tag": "path", "attr": { "d": "M424.4 214.7L72.4 6.6C43.8-10.3 0 6.1 0 47.9V464c0 37.5 40.7 60.1 72.4 41.3l352-208c31.4-18.5 31.5-64.1 0-82.6z" }, "child": [] }] })(props);
 }
@@ -321,7 +324,7 @@ var withPage = async (url, action) => {
 // src/store.ts
 var import_react3 = __toESM(require_react(), 1);
 var STORAGE_KEY = "couch-pip";
-var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe"];
+var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe", "dark", "opacity"];
 var defaults = {
   viewMode: 3 /* Closed */,
   previousMode: 2 /* Picture */,
@@ -338,7 +341,9 @@ var defaults = {
   posY: null,
   update: null,
   safe: false,
-  remoteGuideTop: null
+  remoteGuideTop: null,
+  dark: "prefer",
+  opacity: 1
 };
 var load = () => {
   try {
@@ -348,6 +353,9 @@ var load = () => {
     state2.bookmarks = (Array.isArray(state2.bookmarks) ? state2.bookmarks : []).filter(
       (b) => b && typeof b.name === "string" && /^https?:\/\//i.test(b.url)
     );
+    if (!["off", "prefer", "force"].includes(state2.dark)) state2.dark = defaults.dark;
+    if (typeof state2.opacity !== "number" || !isFinite(state2.opacity)) state2.opacity = 1;
+    state2.opacity = Math.min(1, Math.max(0.3, state2.opacity));
     return state2;
   } catch {
     return { ...defaults };
@@ -392,11 +400,36 @@ var useUIComposition = (0, import_ui2.findModuleExport)?.(isCompositionHook) ?? 
 });
 var lastBounds = null;
 var VIEW_NAME = "couchpip";
+var currentView = null;
+var viewFunctions = () => {
+  const names = (o) => {
+    const out = /* @__PURE__ */ new Set();
+    for (let p = o; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
+      Object.getOwnPropertyNames(p).forEach((n) => {
+        try {
+          if (typeof o[n] === "function" && n !== "constructor") out.add(n);
+        } catch {
+        }
+      });
+    }
+    return [...out].sort();
+  };
+  if (!currentView) return "Open the picture first.";
+  let browser = null;
+  try {
+    browser = currentView.GetBrowser();
+  } catch {
+  }
+  return `View: ${names(currentView).join(", ")}
+
+Browser: ${browser ? names(browser).join(", ") : "?"}`;
+};
 var Browser = ({ url, visible, bounds, devicePixels }) => {
   useUIComposition?.(1 /* Notification */);
   const [{ view, browser }] = (0, import_react4.useState)(() => {
     const root = import_ui2.Router.WindowStore?.GamepadUIMainWindowInstance;
     const view2 = root.CreateBrowserView(VIEW_NAME);
+    currentView = view2;
     return { view: view2, browser: view2.GetBrowser() };
   });
   (0, import_react4.useEffect)(() => {
@@ -483,23 +516,23 @@ var computeBounds = (s, obs) => {
   }
   return { x: Math.round(x), y: Math.round(y), width, height };
 };
-var useAutoAttach = (url, autofill, safe) => {
+var useAutoAttach = (url, autofill, safe, dark, opacity) => {
   (0, import_react4.useEffect)(() => {
     let cancelled = false;
     (async () => {
-      await setOptions(autofill, safe);
-      if (safe) return;
+      await setOptions(autofill, safe, dark, opacity);
+      if (safe && dark === "off" && opacity >= 0.999) return;
       const r = await ensureAttached(url, 20);
       if (!cancelled && !r.ok) console.warn("Couch PiP: couldn't connect to page", r.error);
     })();
     return () => {
       cancelled = true;
     };
-  }, [url, autofill, safe]);
+  }, [url, autofill, safe, dark, opacity]);
 };
 var Pip = () => {
   const s = useStore();
-  useAutoAttach(s.url, s.autofill, s.safe);
+  useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity);
   const obs = useObstructions();
   const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0 } : obs);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels });
@@ -1070,7 +1103,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.6" : "0.0.0";
+var VERSION = true ? "0.4.7" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1275,6 +1308,7 @@ var Diagnostics = () => {
       }
     ) }),
     shot && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("img", { src: shot, style: { width: "100%", border: "1px solid rgba(255,255,255,0.3)" } }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.ButtonItem, { layout: "below", onClick: () => setTargets(viewFunctions()), children: "Browser view functions" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
       import_ui5.ButtonItem,
       {
@@ -1380,6 +1414,20 @@ var Settings = () => {
         "Control page with controller"
       ] }) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(MediaRow, {}),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(
+        import_ui5.ButtonItem,
+        {
+          layout: "below",
+          onClick: () => {
+            detach();
+            setState({ viewMode: 3 /* Closed */ });
+          },
+          children: [
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(FaTimes, { style: { marginRight: 8 } }),
+            "Close picture"
+          ]
+        }
+      ) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.ButtonItem, { layout: "below", label: "Watching", description: hostOf(s.url), onClick: showSourcesModal, children: "Change\u2026" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.ButtonItem, { layout: "below", onClick: showAddressModal, children: "Go to address\u2026" }) }),
       /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
@@ -1398,6 +1446,41 @@ var Settings = () => {
           description: "Hides the rest of the website. Press Menu in the remote to switch back.",
           checked: s.autofill,
           onChange: (v) => setState({ autofill: v })
+        }
+      ) })
+    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.PanelSection, { title: "Look", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        import_ui5.ToggleField,
+        {
+          label: "Dark mode",
+          description: "Sites with a dark theme use it (YouTube, Twitch, Plex\u2026)",
+          checked: s.dark !== "off",
+          onChange: (v) => setState({ dark: v ? "prefer" : "off" })
+        }
+      ) }),
+      s.dark !== "off" && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        import_ui5.ToggleField,
+        {
+          label: "Force dark on every site",
+          description: "Also darkens sites without a dark theme. Some may look odd.",
+          checked: s.dark === "force",
+          onChange: (v) => setState({ dark: v ? "force" : "prefer" })
+        }
+      ) }),
+      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+        import_ui5.SliderField,
+        {
+          label: "Transparency",
+          description: "See your game through the picture. 0% = solid",
+          value: Math.round((1 - s.opacity) * 100),
+          min: 0,
+          max: 70,
+          step: 5,
+          showValue: true,
+          valueSuffix: "%",
+          resetValue: 0,
+          onChange: (v) => setState({ opacity: 1 - v / 100 })
         }
       ) })
     ] }),
@@ -1461,27 +1544,14 @@ var Settings = () => {
         }
       ) })
     ] }),
-    /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_ui5.PanelSection, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-        import_ui5.ToggleField,
-        {
-          label: "Show diagnostics",
-          checked: s.showDiagnostics,
-          onChange: (v) => setState({ showDiagnostics: v })
-        }
-      ) }),
-      /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
-        import_ui5.ButtonItem,
-        {
-          layout: "below",
-          onClick: () => {
-            detach();
-            setState({ viewMode: 3 /* Closed */ });
-          },
-          children: "Close picture"
-        }
-      ) })
-    ] }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSection, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ToggleField,
+      {
+        label: "Show diagnostics",
+        checked: s.showDiagnostics,
+        onChange: (v) => setState({ showDiagnostics: v })
+      }
+    ) }) }),
     s.showDiagnostics && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Diagnostics, {}),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(VersionRow, {})
   ] });

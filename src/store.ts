@@ -23,10 +23,12 @@ export interface State {
     update: { version: string; zip: string; sha256?: string } | null;
     safe: boolean;
     remoteGuideTop: number | null; // where the remote's guide starts on screen (CSS px)
+    dark: "off" | "prefer" | "force"; // prefer = use sites' dark theme; force = darken every site
+    opacity: number; // 0.3 .. 1 (1 = solid)
 }
 
 const STORAGE_KEY = "couch-pip";
-const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe"];
+const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe", "dark", "opacity"];
 
 const defaults: State = {
     viewMode: ViewMode.Closed,
@@ -45,6 +47,8 @@ const defaults: State = {
     update: null,
     safe: false,
     remoteGuideTop: null,
+    dark: "prefer",
+    opacity: 1,
 };
 
 const load = (): State => {
@@ -56,6 +60,9 @@ const load = (): State => {
         state.bookmarks = (Array.isArray(state.bookmarks) ? state.bookmarks : []).filter(
             (b: any) => b && typeof b.name === "string" && /^https?:\/\//i.test(b.url),
         );
+        if (!["off", "prefer", "force"].includes(state.dark)) state.dark = defaults.dark;
+        if (typeof state.opacity !== "number" || !isFinite(state.opacity)) state.opacity = 1;
+        state.opacity = Math.min(1, Math.max(0.3, state.opacity));
         return state;
     } catch {
         return { ...defaults };

@@ -34,6 +34,8 @@ see [Credits](#credits).
   play / pause, volume, fill window.
 - **Saved sources.** Shortcuts for common sites plus your own bookmarks, such
   as a home Jellyfin or Plex server.
+- **Dark mode and transparency.** Sites with a dark theme use it, or force
+  dark on every site. A transparency slider lets your game show through.
 - **Updates itself.** Checks this repository for new versions and installs
   them with one press through Decky's normal install prompt.
 
@@ -100,6 +102,13 @@ Turn on **Show diagnostics** at the bottom of the panel for these tools:
 
 - It relies on undocumented parts of the Steam client, so a Steam update can
   break it.
+- Passkeys and USB security keys can't be used to sign in to Google inside the
+  picture, because their pop-up belongs to the browser and the remote can't
+  reach it. Google offers your other sign-in methods instead (phone prompt,
+  authenticator app or backup codes).
+- It uses Steam's built-in browser. Other browsers such as Brave can't be used
+  for the picture, because only Steam's own browser can be shown over a game
+  this way.
 - Netflix, Disney+ and Prime Video need DRM support in Steam's built-in browser.
   They may not play, or may play at lower quality.
 - Direct trackpad reading supports the Steam Controller (2026). Other

@@ -1,10 +1,10 @@
 import { ButtonItem, Focusable, DialogButton, PanelSection, PanelSectionRow, SliderField, ToggleField } from "@decky/ui";
 import { useEffect, useState } from "react";
-import { FaBackward, FaExpand, FaForward, FaGamepad, FaPlay, FaTv, FaVolumeDown, FaVolumeUp } from "react-icons/fa";
+import { FaBackward, FaExpand, FaForward, FaGamepad, FaPlay, FaTimes, FaTv, FaVolumeDown, FaVolumeUp } from "react-icons/fa";
 
 import * as backend from "./backend";
 import { showAddressModal, showSourcesModal } from "./modals";
-import { lastBounds } from "./pip";
+import { lastBounds, viewFunctions } from "./pip";
 import { findSteamInput, showRemote } from "./remote";
 import { VERSION, checkForUpdate, installUpdate } from "./updates";
 import { getState, setState, useStore } from "./store";
@@ -171,6 +171,11 @@ const Diagnostics = () => {
                 </PanelSectionRow>
             )}
             <PanelSectionRow>
+                <ButtonItem layout="below" onClick={() => setTargets(viewFunctions())}>
+                    Browser view functions
+                </ButtonItem>
+            </PanelSectionRow>
+            <PanelSectionRow>
                 <ButtonItem
                     layout="below"
                     onClick={() => {
@@ -304,6 +309,18 @@ export const Settings = () => {
                 </PanelSectionRow>
                 <MediaRow />
                 <PanelSectionRow>
+                    <ButtonItem
+                        layout="below"
+                        onClick={() => {
+                            backend.detach();
+                            setState({ viewMode: ViewMode.Closed });
+                        }}
+                    >
+                        <FaTimes style={{ marginRight: 8 }} />
+                        Close picture
+                    </ButtonItem>
+                </PanelSectionRow>
+                <PanelSectionRow>
                     <ButtonItem layout="below" label="Watching" description={hostOf(s.url)} onClick={showSourcesModal}>
                         Change…
                     </ButtonItem>
@@ -327,6 +344,41 @@ export const Settings = () => {
                         description="Hides the rest of the website. Press Menu in the remote to switch back."
                         checked={s.autofill}
                         onChange={(v: boolean) => setState({ autofill: v })}
+                    />
+                </PanelSectionRow>
+            </PanelSection>
+
+            <PanelSection title="Look">
+                <PanelSectionRow>
+                    <ToggleField
+                        label="Dark mode"
+                        description="Sites with a dark theme use it (YouTube, Twitch, Plex…)"
+                        checked={s.dark !== "off"}
+                        onChange={(v: boolean) => setState({ dark: v ? "prefer" : "off" })}
+                    />
+                </PanelSectionRow>
+                {s.dark !== "off" && (
+                    <PanelSectionRow>
+                        <ToggleField
+                            label="Force dark on every site"
+                            description="Also darkens sites without a dark theme. Some may look odd."
+                            checked={s.dark === "force"}
+                            onChange={(v: boolean) => setState({ dark: v ? "force" : "prefer" })}
+                        />
+                    </PanelSectionRow>
+                )}
+                <PanelSectionRow>
+                    <SliderField
+                        label="Transparency"
+                        description="See your game through the picture. 0% = solid"
+                        value={Math.round((1 - s.opacity) * 100)}
+                        min={0}
+                        max={70}
+                        step={5}
+                        showValue
+                        valueSuffix="%"
+                        resetValue={0}
+                        onChange={(v: number) => setState({ opacity: 1 - v / 100 })}
                     />
                 </PanelSectionRow>
             </PanelSection>
@@ -399,17 +451,6 @@ export const Settings = () => {
                         checked={s.showDiagnostics}
                         onChange={(v: boolean) => setState({ showDiagnostics: v })}
                     />
-                </PanelSectionRow>
-                <PanelSectionRow>
-                    <ButtonItem
-                        layout="below"
-                        onClick={() => {
-                            backend.detach();
-                            setState({ viewMode: ViewMode.Closed });
-                        }}
-                    >
-                        Close picture
-                    </ButtonItem>
                 </PanelSectionRow>
             </PanelSection>
 

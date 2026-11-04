@@ -16,7 +16,7 @@ export const insertText = callable<[text: string], Result<string>>("insert_text"
 export const media = callable<[action: string, amount: number], Result<any>>("media");
 export const back = callable<[], Result<string>>("back");
 export const reload = callable<[], Result>("reload");
-export const setOptions = callable<[autofill: boolean, safe: boolean], Result>("set_options");
+export const setOptions = callable<[autofill: boolean, safe: boolean, dark: string, opacity: number], Result>("set_options");
 export const listInputDevices = callable<[], { ok: boolean; error?: string; user?: string; devices?: { name: string; events: string[]; readable: string[]; abs: string }[]; hidraw?: { dev: string; readable: boolean }[] }>("list_input_devices");
 export interface PadStatus { ok: boolean; devices: number; reports: number; touches: number; sent: number; error: string }
 export const padsStart = callable<[], PadStatus>("pads_start");
