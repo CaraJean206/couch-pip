@@ -369,6 +369,23 @@ JS_MEDIA = r"""
 # - draws the trackpad mouse cursor
 JS_HELPER = r"""
 (() => {
+  // Google's sign-in: a passkey / security key request opens a browser dialog
+  // outside the page, which the remote can't reach. Report it as unavailable
+  // so Google offers its other sign-in methods.
+  if (location.hostname === 'accounts.google.com' && !window.__cpip_no_webauthn && window.CredentialsContainer) {
+    window.__cpip_no_webauthn = true;
+    for (const name of ['get', 'create']) {
+      const original = CredentialsContainer.prototype[name];
+      CredentialsContainer.prototype[name] = function (options) {
+        if (options && options.publicKey) {
+          return Promise.reject(new DOMException('Not available in Couch PiP', 'NotAllowedError'));
+        }
+        return original.call(this, options);
+      };
+    }
+    delete window.PublicKeyCredential;
+  }
+
   const OPTS = __OPTS__;
   if (window.__cpip) { Object.assign(window.__cpip.opts, OPTS); return 'updated'; }
 
