@@ -3,6 +3,16 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.8: Streaming list and DRM check
+
+- New built-in list: YouTube, Twitch, Philo, Paramount+ (Showtime is part of
+  Paramount+ now), HBO Max and Plex. Paid services are marked "may not play
+  on SteamOS": they use copy protection (DRM) and don't officially support
+  Linux.
+- Diagnostics: **Check video protection (DRM)** shows whether Steam's browser
+  can play copy-protected video at all.
+- Peacock isn't listed: it blocks Linux.
+
 ## 0.4.7: Dark mode, transparency, Google sign-in fix
 
 - **Google sign-in with two-step verification no longer gets stuck.** Google's

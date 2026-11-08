@@ -300,6 +300,7 @@ var padsStart = callable("pads_start");
 var padsStop = callable("pads_stop");
 var padsStatus = callable("pads_status");
 var snapshot = callable("snapshot");
+var drmCheck = callable("drm_check");
 var fillStatus = callable("fill_status");
 var pointer = callable("pointer");
 var ensureAttached = async (url, tries = 8) => {
@@ -556,13 +557,14 @@ var useHidePip = () => {
     return () => setState({ visible: true });
   }, []);
 };
+var DRM_NOTE = "may not play on SteamOS";
 var BUILT_IN = [
   { name: "YouTube", url: "https://www.youtube.com" },
-  { name: "Netflix", url: "https://www.netflix.com/browse" },
   { name: "Twitch", url: "https://www.twitch.tv" },
-  { name: "Plex (app.plex.tv)", url: "https://app.plex.tv/desktop" },
-  { name: "Disney+", url: "https://www.disneyplus.com" },
-  { name: "Prime Video", url: "https://www.primevideo.com" }
+  { name: "Philo", url: "https://www.philo.com", note: DRM_NOTE },
+  { name: "Paramount+ (includes Showtime)", url: "https://www.paramountplus.com", note: DRM_NOTE },
+  { name: "HBO Max", url: "https://www.hbomax.com", note: DRM_NOTE },
+  { name: "Plex (app.plex.tv)", url: "https://app.plex.tv/desktop" }
 ];
 var openUrl = (url) => {
   const full = normalizeUrl(url);
@@ -636,7 +638,14 @@ var SourcesModal = ({ closeModal }) => {
         },
         b.url
       )),
-      BUILT_IN.map((b) => /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ui3.DialogButton, { style: row, onClick: () => pick(b.url), children: b.name }, b.url)),
+      BUILT_IN.map((b) => /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(import_ui3.DialogButton, { style: row, onClick: () => pick(b.url), children: [
+        b.name,
+        b.note && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)("span", { style: { opacity: 0.6, marginLeft: 8, fontSize: "0.8em" }, children: [
+          "(",
+          b.note,
+          ")"
+        ] })
+      ] }, b.url)),
       /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
         import_ui3.DialogButton,
         {
@@ -1103,7 +1112,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.7" : "0.0.0";
+var VERSION = true ? "0.4.8" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1308,6 +1317,19 @@ var Diagnostics = () => {
       }
     ) }),
     shot && /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("img", { src: shot, style: { width: "100%", border: "1px solid rgba(255,255,255,0.3)" } }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ButtonItem,
+      {
+        layout: "below",
+        description: "Can Steam's browser play paid streaming services?",
+        onClick: async () => {
+          setTargets("Checking\u2026");
+          const r = await withPage(getState().url, () => drmCheck());
+          setTargets(r.ok ? String(r.result) : r.error ?? "error");
+        },
+        children: "Check video protection (DRM)"
+      }
+    ) }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.ButtonItem, { layout: "below", onClick: () => setTargets(viewFunctions()), children: "Browser view functions" }) }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
       import_ui5.ButtonItem,

@@ -995,6 +995,34 @@ class Plugin:
 
         return await self._safe(run())
 
+    async def drm_check(self):
+        """Whether Steam's browser can play copy-protected video (Widevine),
+        which paid streaming services need."""
+        expr = r"""
+(async () => {
+  if (!navigator.requestMediaKeySystemAccess) return "No: this page can't use protected video (needs https)";
+  const cfg = [{ initDataTypes: ['cenc'], videoCapabilities: [{ contentType: 'video/mp4; codecs="avc1.42E01E"' }],
+                 audioCapabilities: [{ contentType: 'audio/mp4; codecs="mp4a.40.2"' }] }];
+  try {
+    const a = await navigator.requestMediaKeySystemAccess('com.widevine.alpha', cfg);
+    await a.createMediaKeys();
+    return 'Yes: Widevine is available. Paid services may still block Linux.';
+  } catch (e) {
+    return 'No: Widevine is missing (' + e.name + '). Paid streaming services can\'t play here.';
+  }
+})()
+"""
+
+        async def run():
+            res = await self._send(
+                "Runtime.evaluate", {"expression": expr, "awaitPromise": True, "returnByValue": True}
+            )
+            if "exceptionDetails" in res:
+                raise RuntimeError(res["exceptionDetails"].get("text", "check failed"))
+            return res.get("result", {}).get("value") or "Unknown"
+
+        return await self._safe(run())
+
     async def fill_status(self):
         """What the page helper sees, for the diagnostics panel."""
         return await self._safe(self._eval("window.__cpip ? window.__cpip.status() : null"))

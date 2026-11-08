@@ -171,6 +171,19 @@ const Diagnostics = () => {
                 </PanelSectionRow>
             )}
             <PanelSectionRow>
+                <ButtonItem
+                    layout="below"
+                    description="Can Steam's browser play paid streaming services?"
+                    onClick={async () => {
+                        setTargets("Checking…");
+                        const r = await backend.withPage(getState().url, () => backend.drmCheck());
+                        setTargets(r.ok ? String(r.result) : r.error ?? "error");
+                    }}
+                >
+                    Check video protection (DRM)
+                </ButtonItem>
+            </PanelSectionRow>
+            <PanelSectionRow>
                 <ButtonItem layout="below" onClick={() => setTargets(viewFunctions())}>
                     Browser view functions
                 </ButtonItem>

@@ -23,6 +23,7 @@ export const padsStart = callable<[], PadStatus>("pads_start");
 export const padsStop = callable<[], Result>("pads_stop");
 export const padsStatus = callable<[], PadStatus>("pads_status");
 export const snapshot = callable<[], Result<string>>("snapshot");
+export const drmCheck = callable<[], Result<string>>("drm_check");
 export const fillStatus = callable<[], Result<any>>("fill_status");
 export const pointer = callable<[dx: number, dy: number, wheel: number, click: boolean], Result<string>>("pointer");
 

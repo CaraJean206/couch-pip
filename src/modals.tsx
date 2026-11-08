@@ -12,13 +12,17 @@ export const useHidePip = () => {
     }, []);
 };
 
-export const BUILT_IN: Bookmark[] = [
+// Paid services use copy protection (DRM) and don't officially support Linux,
+// so they're marked as untested on SteamOS.
+const DRM_NOTE = "may not play on SteamOS";
+
+export const BUILT_IN: (Bookmark & { note?: string })[] = [
     { name: "YouTube", url: "https://www.youtube.com" },
-    { name: "Netflix", url: "https://www.netflix.com/browse" },
     { name: "Twitch", url: "https://www.twitch.tv" },
+    { name: "Philo", url: "https://www.philo.com", note: DRM_NOTE },
+    { name: "Paramount+ (includes Showtime)", url: "https://www.paramountplus.com", note: DRM_NOTE },
+    { name: "HBO Max", url: "https://www.hbomax.com", note: DRM_NOTE },
     { name: "Plex (app.plex.tv)", url: "https://app.plex.tv/desktop" },
-    { name: "Disney+", url: "https://www.disneyplus.com" },
-    { name: "Prime Video", url: "https://www.primevideo.com" },
 ];
 
 export const openUrl = (url: string) => {
@@ -95,6 +99,7 @@ const SourcesModal = ({ closeModal }: { closeModal?: () => void }) => {
                 {BUILT_IN.map((b) => (
                     <DialogButton key={b.url} style={row} onClick={() => pick(b.url)}>
                         {b.name}
+                        {b.note && <span style={{ opacity: 0.6, marginLeft: 8, fontSize: "0.8em" }}>({b.note})</span>}
                     </DialogButton>
                 ))}
                 <DialogButton

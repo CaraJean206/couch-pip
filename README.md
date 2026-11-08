@@ -109,6 +109,10 @@ Turn on **Show diagnostics** at the bottom of the panel for these tools:
 - It uses Steam's built-in browser. Other browsers such as Brave can't be used
   for the picture, because only Steam's own browser can be shown over a game
   this way.
+- Paid streaming services (Philo, Paramount+, HBO Max, Netflix and others) use
+  copy protection (DRM) and don't officially support Linux, so they may not play.
+  **Check video protection (DRM)** in diagnostics shows whether Steam's browser
+  can play protected video. Peacock blocks Linux.
 - Netflix, Disney+ and Prime Video need DRM support in Steam's built-in browser.
   They may not play, or may play at lower quality.
 - Direct trackpad reading supports the Steam Controller (2026). Other
