@@ -557,15 +557,7 @@ var useHidePip = () => {
     return () => setState({ visible: true });
   }, []);
 };
-var DRM_NOTE = "may not play on SteamOS";
-var BUILT_IN = [
-  { name: "YouTube", url: "https://www.youtube.com" },
-  { name: "Twitch", url: "https://www.twitch.tv" },
-  { name: "Philo", url: "https://www.philo.com", note: DRM_NOTE },
-  { name: "Paramount+ (includes Showtime)", url: "https://www.paramountplus.com", note: DRM_NOTE },
-  { name: "HBO Max", url: "https://www.hbomax.com", note: DRM_NOTE },
-  { name: "Plex (app.plex.tv)", url: "https://app.plex.tv/desktop" }
-];
+var BUILT_IN = [{ name: "YouTube", url: "https://www.youtube.com" }];
 var openUrl = (url) => {
   const full = normalizeUrl(url);
   if (!isWebUrl(full)) return;
@@ -595,12 +587,12 @@ var AddressModal = ({ closeModal, title, withName }) => {
         openUrl(full);
       },
       children: [
-        withName && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ui3.TextField, { label: "Name", placeholder: "Jellyfin", value: name, onChange: (e) => setName(e.target.value) }),
+        withName && /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(import_ui3.TextField, { label: "Name", placeholder: "My site", value: name, onChange: (e) => setName(e.target.value) }),
         /* @__PURE__ */ (0, import_jsx_runtime2.jsx)(
           import_ui3.TextField,
           {
             label: "Address",
-            description: withName ? "For a home server, e.g. 192.168.1.20:8096 (Jellyfin) or 192.168.1.20:32400/web (Plex)" : void 0,
+            description: withName ? "A web address, or a home server such as 192.168.1.20:8096" : void 0,
             value: url,
             focusOnMount: !withName,
             onChange: (e) => setUrl(e.target.value)
@@ -654,7 +646,7 @@ var SourcesModal = ({ closeModal }) => {
             closeModal?.();
             showAddServerModal();
           },
-          children: "+ Add Jellyfin, Plex server or any site\u2026"
+          children: "+ Add a site\u2026"
         }
       ),
       !bookmarks.some((b) => b.url === url) && url && /* @__PURE__ */ (0, import_jsx_runtime2.jsxs)(
@@ -1112,7 +1104,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.8" : "0.0.0";
+var VERSION = true ? "0.4.9" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1476,7 +1468,7 @@ var Settings = () => {
         import_ui5.ToggleField,
         {
           label: "Dark mode",
-          description: "Sites with a dark theme use it (YouTube, Twitch, Plex\u2026)",
+          description: "Sites with a dark theme use it, like YouTube",
           checked: s.dark !== "off",
           onChange: (v) => setState({ dark: v ? "prefer" : "off" })
         }

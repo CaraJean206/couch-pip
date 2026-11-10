@@ -5,8 +5,8 @@
 [![Coded with Claude](https://img.shields.io/badge/coded%20with-Claude-D97757)](#coded-with-claude)
 [![License: BSD-3-Clause](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
-Watch YouTube, Twitch, Plex, Jellyfin or any website in a small window over
-your game in SteamOS Game Mode, and control it with your controller. Made for
+Watch YouTube or other websites in a small window over your game in SteamOS
+Game Mode, and control it with your controller. Made for
 playing on a TV with a Steam Machine, and works on a Steam Deck too.
 
 Couch PiP is a [Decky Loader](https://github.com/SteamDeckHomebrew/decky-loader)
@@ -32,8 +32,8 @@ see [Credits](#credits).
   buttons do the same.
 - **Playback buttons** in the Quick Access Menu: back / ahead 10 seconds,
   play / pause, volume, fill window.
-- **Saved sources.** Shortcuts for common sites plus your own bookmarks, such
-  as a home Jellyfin or Plex server.
+- **Saved sites.** YouTube is built in, and you can save any other site or
+  home media server.
 - **Dark mode and transparency.** Sites with a dark theme use it, or force
   dark on every site. A transparency slider lets your game show through.
 - **Updates itself.** Checks this repository for new versions and installs
@@ -54,13 +54,43 @@ After that, new versions show up as a notification and an **Update** button
 at the top of the plugin's panel. You can also press **Check for updates** at
 the bottom.
 
+## Please read: sign-ins and paid services
+
+Couch PiP shows websites in Steam's built-in browser. That browser runs on
+SteamOS, which is Linux, and many sites don't expect it. Before you rely on it:
+
+**Signing in**
+
+- You sign in on the websites themselves. Couch PiP never stores or logs your
+  passwords. Text you type with the remote goes straight into the page.
+- **"Continue with Google / Apple / Facebook" buttons** (third-party sign-in)
+  often open a separate pop-up window. Steam's browser may not handle these in
+  Game Mode, and there are reports of Steam crashing and restarting when one
+  opens. **Sign in with an email and password instead whenever the site lets
+  you.**
+- Passkeys and USB security keys can't be used inside the picture (see
+  [Known limits](#known-limits)).
+- Use at your own risk. If a sign-in misbehaves, leave the picture, restart
+  Steam if needed, and use the site on another device.
+
+**Paid streaming services**
+
+- Most paid services (for example Netflix, HBO Max, Paramount+, Philo, Disney+
+  or Prime Video) use copy protection (DRM) and officially support only
+  Windows, macOS and ChromeOS. On SteamOS they may refuse to play, show a
+  browser error, or play at lower quality. Peacock blocks Linux outright.
+- Couch PiP doesn't get around copy protection, region checks or paywalls, and
+  isn't affiliated with any streaming service. Use them under their own terms.
+- To find out whether Steam's browser can play protected video at all, use
+  **Check video protection (DRM)** in [Diagnostics](#diagnostics).
+
 ## Using it
 
 Open the Quick Access Menu (the `···` button), go to the Decky tab and choose
 **Couch PiP**.
 
-- **Choose what to watch / Change…** picks a site. Add a home server with
-  **+ Add Jellyfin, Plex server or any site…**, for example `192.168.1.20:8096`.
+- **Choose what to watch / Change…** picks a site. Save another site or a home
+  media server with **+ Add a site…**, for example `192.168.1.20:8096`.
 - **Control page with controller** opens the remote.
 - The **Picture** section sets position, size, edge spacing and fine tuning.
 
@@ -84,19 +114,30 @@ and the controller goes back to the game.
 | Right trackpad click | Click under the cursor |
 | Left trackpad | Scroll |
 
-## Troubleshooting
+## Diagnostics
 
-Turn on **Show diagnostics** at the bottom of the panel for these tools:
+If something doesn't work, turn on **Show diagnostics** at the bottom of the
+Couch PiP panel. A **Diagnostics** section appears with these tools. Results
+only show on your screen; nothing is sent anywhere.
 
-- **Use device pixels**: try this if the picture is the wrong size or in the
-  wrong place.
-- **Check video fill** and **Snapshot page**: show what the plugin and the
-  browser see when a video doesn't display properly.
-- **Safe mode**: turns off every change the plugin makes to web pages.
-- **Steam input functions** and **Controller devices**: help find out why the
-  trackpads don't respond.
-- With diagnostics on, the remote also shows a small live line of the
-  controller input it receives.
+| Tool | What it does | Use it when |
+| --- | --- | --- |
+| **Screen / PiP bounds** (top lines) | Shows the screen size Steam reports and where the picture is placed. | The picture is the wrong size or in the wrong place. |
+| **Use device pixels** | Switches how the picture's size is measured. | The picture is clearly too small, too big, or offset. |
+| **List browser pages** | Lists the web pages Steam has open, marking the one the remote controls. | The remote says it can't connect to the page. |
+| **Check video fill** | Shows the videos the plugin found and whether it filled the window. | A video doesn't fill the picture, or the picture goes blank. |
+| **Snapshot page** | Shows a picture of what the browser itself is drawing. | The picture is black or white: if the snapshot looks right, the problem is Steam's display, not the page. |
+| **Check video protection (DRM)** | Says whether Steam's browser can play copy-protected video (Widevine), which paid services need. | A paid streaming service won't play. |
+| **Browser view functions** | Lists what Steam's browser view supports. | Helping investigate features like transparency. |
+| **Steam input functions** | Lists the controller functions Steam offers plugins. | The trackpads don't respond. |
+| **Controller devices** | Lists the controllers SteamOS sees and whether the plugin can read them. | The trackpads don't respond. |
+| **Safe mode** | Turns off every change the plugin makes to web pages (scrollbar hiding, fill, cursor) and reloads the page. | A site behaves strangely, to check whether Couch PiP is the cause. |
+
+With diagnostics on, the remote also shows a small live line of the controller
+input it receives, which shows whether trackpad movement is arriving.
+
+When reporting a problem, a photo of the relevant diagnostics result helps a
+lot. Please [open an issue](https://github.com/CaraJean206/couch-pip/issues).
 
 ## Known limits
 
@@ -109,12 +150,10 @@ Turn on **Show diagnostics** at the bottom of the panel for these tools:
 - It uses Steam's built-in browser. Other browsers such as Brave can't be used
   for the picture, because only Steam's own browser can be shown over a game
   this way.
-- Paid streaming services (Philo, Paramount+, HBO Max, Netflix and others) use
-  copy protection (DRM) and don't officially support Linux, so they may not play.
-  **Check video protection (DRM)** in diagnostics shows whether Steam's browser
-  can play protected video. Peacock blocks Linux.
-- Netflix, Disney+ and Prime Video need DRM support in Steam's built-in browser.
-  They may not play, or may play at lower quality.
+- Paid streaming services may not play; see
+  [sign-ins and paid services](#please-read-sign-ins-and-paid-services).
+- Third-party sign-in pop-ups ("Continue with Google / Apple / Facebook") may
+  crash Steam in Game Mode; sign in with an email and password instead.
 - Direct trackpad reading supports the Steam Controller (2026). Other
   controllers use Steam's own input, which may not report trackpad movement on
   newer Steam builds.

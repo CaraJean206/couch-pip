@@ -365,7 +365,7 @@ export const Settings = () => {
                 <PanelSectionRow>
                     <ToggleField
                         label="Dark mode"
-                        description="Sites with a dark theme use it (YouTube, Twitch, Plex…)"
+                        description="Sites with a dark theme use it, like YouTube"
                         checked={s.dark !== "off"}
                         onChange={(v: boolean) => setState({ dark: v ? "prefer" : "off" })}
                     />

@@ -12,18 +12,8 @@ export const useHidePip = () => {
     }, []);
 };
 
-// Paid services use copy protection (DRM) and don't officially support Linux,
-// so they're marked as untested on SteamOS.
-const DRM_NOTE = "may not play on SteamOS";
-
-export const BUILT_IN: (Bookmark & { note?: string })[] = [
-    { name: "YouTube", url: "https://www.youtube.com" },
-    { name: "Twitch", url: "https://www.twitch.tv" },
-    { name: "Philo", url: "https://www.philo.com", note: DRM_NOTE },
-    { name: "Paramount+ (includes Showtime)", url: "https://www.paramountplus.com", note: DRM_NOTE },
-    { name: "HBO Max", url: "https://www.hbomax.com", note: DRM_NOTE },
-    { name: "Plex (app.plex.tv)", url: "https://app.plex.tv/desktop" },
-];
+// Only YouTube is built in. Anything else can be added as a saved site.
+export const BUILT_IN: (Bookmark & { note?: string })[] = [{ name: "YouTube", url: "https://www.youtube.com" }];
 
 export const openUrl = (url: string) => {
     const full = normalizeUrl(url);
@@ -55,11 +45,11 @@ const AddressModal = ({ closeModal, title, withName }: { closeModal?: () => void
             }}
         >
             {withName && (
-                <TextField label="Name" placeholder="Jellyfin" value={name} onChange={(e: { target: { value: string } }) => setName(e.target.value)} />
+                <TextField label="Name" placeholder="My site" value={name} onChange={(e: { target: { value: string } }) => setName(e.target.value)} />
             )}
             <TextField
                 label="Address"
-                description={withName ? "For a home server, e.g. 192.168.1.20:8096 (Jellyfin) or 192.168.1.20:32400/web (Plex)" : undefined}
+                description={withName ? "A web address, or a home server such as 192.168.1.20:8096" : undefined}
                 value={url}
                 focusOnMount={!withName}
                 onChange={(e: { target: { value: string } }) => setUrl(e.target.value)}
@@ -109,7 +99,7 @@ const SourcesModal = ({ closeModal }: { closeModal?: () => void }) => {
                         showAddServerModal();
                     }}
                 >
-                    + Add Jellyfin, Plex server or any site…
+                    + Add a site…
                 </DialogButton>
                 {!bookmarks.some((b) => b.url === url) && url && (
                     <DialogButton

@@ -3,6 +3,14 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.9: YouTube only, sign-in and paid-service notes
+
+- The built-in list is now just YouTube. Plex, Twitch, Philo, Paramount+ and
+  HBO Max were removed; any site can still be saved with **+ Add a site…**.
+- README: new **Please read: sign-ins and paid services** section (third-party
+  sign-in pop-ups can crash Steam in Game Mode; paid services may not play on
+  SteamOS) and a **Diagnostics** section explaining every diagnostic tool.
+
 ## 0.4.8: Streaming list and DRM check
 
 - New built-in list: YouTube, Twitch, Philo, Paramount+ (Showtime is part of

@@ -109,7 +109,7 @@ export const normalizeUrl = (input: string) => {
         // Has a scheme (not just "host:port"): keep only http/https.
         return /^https?:\/\//i.test(t) ? t : "";
     }
-    // Bare IPs and local names (a home Jellyfin server) are usually plain http.
+    // Bare IPs and local names (a home media server) are usually plain http.
     if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/|$)/.test(t) || /^[^./]+(:\d+)(\/|$)/.test(t) || /\.local(:\d+)?(\/|$)/.test(t)) {
         return "http://" + t;
     }
