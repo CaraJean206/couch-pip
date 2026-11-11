@@ -344,7 +344,9 @@ var defaults = {
   safe: false,
   remoteGuideTop: null,
   dark: "prefer",
-  opacity: 1
+  opacity: 1,
+  test2: false,
+  glass: "off"
 };
 var load = () => {
   try {
@@ -453,6 +455,59 @@ var Browser = ({ url, visible, bounds, devicePixels }) => {
   (0, import_react4.useEffect)(() => () => {
     view.Destroy();
   }, []);
+  const { glass } = useStore();
+  (0, import_react4.useEffect)(() => {
+    try {
+      if (typeof browser.AddGlass !== "function") {
+        experimentLog.glass = "AddGlass isn't available in this Steam version";
+        return;
+      }
+      browser.AddGlass(glass !== "off", false, glass === "blur");
+      experimentLog.glass = glass === "off" ? "Glass off" : `Glass on${glass === "blur" ? " with blur" : ""} (no error)`;
+    } catch (e) {
+      experimentLog.glass = `AddGlass failed: ${e}`;
+    }
+  }, [glass]);
+  return null;
+};
+var experimentLog = { second: "", glass: "" };
+var SecondWindow = ({ url, bounds }) => {
+  const [made] = (0, import_react4.useState)(() => {
+    try {
+      const root = import_ui2.Router.WindowStore?.GamepadUIMainWindowInstance;
+      const view = root.CreateBrowserView(VIEW_NAME + "-test2");
+      const browser = view.GetBrowser();
+      experimentLog.second = "Second window created";
+      return { view, browser };
+    } catch (e) {
+      experimentLog.second = `Couldn't create a second window: ${e}`;
+      return null;
+    }
+  });
+  (0, import_react4.useEffect)(() => {
+    if (!made) return;
+    try {
+      made.view.LoadURL(url);
+      made.browser.SetVisible(true);
+    } catch (e) {
+      experimentLog.second = `Second window error: ${e}`;
+    }
+  }, [url]);
+  (0, import_react4.useEffect)(() => {
+    if (!made) return;
+    try {
+      made.browser.SetBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+    } catch (e) {
+      experimentLog.second = `Second window error: ${e}`;
+    }
+  }, [bounds.x, bounds.y, bounds.width, bounds.height]);
+  (0, import_react4.useEffect)(() => () => {
+    try {
+      made?.view.Destroy();
+    } catch {
+    }
+    experimentLog.second = "Second window closed";
+  }, []);
   return null;
 };
 var getObstructions = () => {
@@ -536,7 +591,11 @@ var Pip = () => {
   useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity);
   const obs = useObstructions();
   const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0 } : obs);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels });
+  const second = s.test2 && s.viewMode === 2 /* Picture */ ? computeBounds({ ...s, posX: 1 - placeOf(s)[0], posY: placeOf(s)[1] }, obs) : null;
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+    /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels }),
+    second && s.visible && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(SecondWindow, { url: "https://www.youtube.com", bounds: second })
+  ] });
 };
 var PipOuter = () => {
   const { viewMode } = useStore();
@@ -1104,7 +1163,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.9" : "0.0.0";
+var VERSION = true ? "0.4.9.1" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1320,6 +1379,41 @@ var Diagnostics = () => {
           setTargets(r.ok ? String(r.result) : r.error ?? "error");
         },
         children: "Check video protection (DRM)"
+      }
+    ) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("div", { style: { fontSize: 13, fontWeight: 600, marginTop: 6 }, children: "Experiments (test build)" }) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.ToggleField,
+      {
+        label: "Test second window",
+        description: "Opens YouTube in a second window on the other side of the screen",
+        checked: s.test2,
+        onChange: (v) => {
+          setState({ test2: v });
+          setTimeout(() => setTargets(experimentLog.second || "\u2026"), 800);
+        }
+      }
+    ) }),
+    /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(
+      import_ui5.SliderField,
+      {
+        label: "Test see-through glass",
+        description: "Off / Glass / Glass + blur. Try with Transparency at 50%",
+        value: s.glass === "off" ? 0 : s.glass === "glass" ? 1 : 2,
+        min: 0,
+        max: 2,
+        step: 1,
+        notchCount: 3,
+        notchTicksVisible: true,
+        notchLabels: [
+          { label: "Off", notchIndex: 0, value: 0 },
+          { label: "Glass", notchIndex: 1, value: 1 },
+          { label: "Blur", notchIndex: 2, value: 2 }
+        ],
+        onChange: (v) => {
+          setState({ glass: v === 0 ? "off" : v === 1 ? "glass" : "blur" });
+          setTimeout(() => setTargets(experimentLog.glass || "\u2026"), 300);
+        }
       }
     ) }),
     /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.PanelSectionRow, { children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(import_ui5.ButtonItem, { layout: "below", onClick: () => setTargets(viewFunctions()), children: "Browser view functions" }) }),

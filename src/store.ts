@@ -25,6 +25,9 @@ export interface State {
     remoteGuideTop: number | null; // where the remote's guide starts on screen (CSS px)
     dark: "off" | "prefer" | "force"; // prefer = use sites' dark theme; force = darken every site
     opacity: number; // 0.3 .. 1 (1 = solid)
+    // Experiments (not saved)
+    test2: boolean; // second picture window
+    glass: "off" | "glass" | "blur"; // Steam's AddGlass on the picture
 }
 
 const STORAGE_KEY = "couch-pip";
@@ -49,6 +52,8 @@ const defaults: State = {
     remoteGuideTop: null,
     dark: "prefer",
     opacity: 1,
+    test2: false,
+    glass: "off",
 };
 
 const load = (): State => {

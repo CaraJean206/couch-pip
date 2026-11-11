@@ -104,6 +104,66 @@ const Browser = ({ url, visible, bounds, devicePixels }: { url: string; visible:
         view.Destroy();
     }, []);
 
+    // Experiment: Steam's "glass" (see-through / blur) for the picture.
+    const { glass } = useStore();
+    useEffect(() => {
+        try {
+            if (typeof browser.AddGlass !== "function") {
+                experimentLog.glass = "AddGlass isn't available in this Steam version";
+                return;
+            }
+            browser.AddGlass(glass !== "off", false, glass === "blur");
+            experimentLog.glass = glass === "off" ? "Glass off" : `Glass on${glass === "blur" ? " with blur" : ""} (no error)`;
+        } catch (e) {
+            experimentLog.glass = `AddGlass failed: ${e}`;
+        }
+    }, [glass]);
+
+    return null;
+};
+
+/** Results of the experiments, shown in diagnostics. */
+export const experimentLog: { second: string; glass: string } = { second: "", glass: "" };
+
+/** Experiment: a second picture window, mirrored to the other side of the screen. */
+const SecondWindow = ({ url, bounds }: { url: string; bounds: Rect }) => {
+    const [made] = useState(() => {
+        try {
+            const root: any = Router.WindowStore?.GamepadUIMainWindowInstance;
+            const view = root.CreateBrowserView(VIEW_NAME + "-test2");
+            const browser = view.GetBrowser();
+            experimentLog.second = "Second window created";
+            return { view, browser };
+        } catch (e) {
+            experimentLog.second = `Couldn't create a second window: ${e}`;
+            return null;
+        }
+    });
+    useEffect(() => {
+        if (!made) return;
+        try {
+            made.view.LoadURL(url);
+            made.browser.SetVisible(true);
+        } catch (e) {
+            experimentLog.second = `Second window error: ${e}`;
+        }
+    }, [url]);
+    useEffect(() => {
+        if (!made) return;
+        try {
+            made.browser.SetBounds(bounds.x, bounds.y, bounds.width, bounds.height);
+        } catch (e) {
+            experimentLog.second = `Second window error: ${e}`;
+        }
+    }, [bounds.x, bounds.y, bounds.width, bounds.height]);
+    useEffect(() => () => {
+        try {
+            made?.view.Destroy();
+        } catch {
+            // ignore
+        }
+        experimentLog.second = "Second window closed";
+    }, []);
     return null;
 };
 
@@ -216,7 +276,17 @@ const Pip = () => {
     useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity);
     const obs = useObstructions();
     const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0 } : obs);
-    return <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />;
+    // The test window goes on the opposite side, same size.
+    const second =
+        s.test2 && s.viewMode === ViewMode.Picture
+            ? computeBounds({ ...s, posX: 1 - placeOf(s)[0], posY: placeOf(s)[1] }, obs)
+            : null;
+    return (
+        <>
+            <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />
+            {second && s.visible && <SecondWindow url="https://www.youtube.com" bounds={second} />}
+        </>
+    );
 };
 
 export const PipOuter = () => {

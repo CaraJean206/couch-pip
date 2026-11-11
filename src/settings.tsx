@@ -4,7 +4,7 @@ import { FaBackward, FaExpand, FaForward, FaGamepad, FaPlay, FaTimes, FaTv, FaVo
 
 import * as backend from "./backend";
 import { showAddressModal, showSourcesModal } from "./modals";
-import { lastBounds, viewFunctions } from "./pip";
+import { experimentLog, lastBounds, viewFunctions } from "./pip";
 import { findSteamInput, showRemote } from "./remote";
 import { VERSION, checkForUpdate, installUpdate } from "./updates";
 import { getState, setState, useStore } from "./store";
@@ -182,6 +182,41 @@ const Diagnostics = () => {
                 >
                     Check video protection (DRM)
                 </ButtonItem>
+            </PanelSectionRow>
+            <PanelSectionRow>
+                <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6 }}>Experiments (test build)</div>
+            </PanelSectionRow>
+            <PanelSectionRow>
+                <ToggleField
+                    label="Test second window"
+                    description="Opens YouTube in a second window on the other side of the screen"
+                    checked={s.test2}
+                    onChange={(v: boolean) => {
+                        setState({ test2: v });
+                        setTimeout(() => setTargets(experimentLog.second || "…"), 800);
+                    }}
+                />
+            </PanelSectionRow>
+            <PanelSectionRow>
+                <SliderField
+                    label="Test see-through glass"
+                    description="Off / Glass / Glass + blur. Try with Transparency at 50%"
+                    value={s.glass === "off" ? 0 : s.glass === "glass" ? 1 : 2}
+                    min={0}
+                    max={2}
+                    step={1}
+                    notchCount={3}
+                    notchTicksVisible
+                    notchLabels={[
+                        { label: "Off", notchIndex: 0, value: 0 },
+                        { label: "Glass", notchIndex: 1, value: 1 },
+                        { label: "Blur", notchIndex: 2, value: 2 },
+                    ]}
+                    onChange={(v: number) => {
+                        setState({ glass: v === 0 ? "off" : v === 1 ? "glass" : "blur" });
+                        setTimeout(() => setTargets(experimentLog.glass || "…"), 300);
+                    }}
+                />
             </PanelSectionRow>
             <PanelSectionRow>
                 <ButtonItem layout="below" onClick={() => setTargets(viewFunctions())}>
