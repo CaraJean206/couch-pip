@@ -345,10 +345,13 @@ JS_MEDIA = r"""
       }
       v.currentTime = Math.max(0, v.currentTime + amount);
       return (amount > 0 ? '+' : '') + amount + 's';
-    case 'volume':
-      v.muted = false;
-      v.volume = Math.min(1, Math.max(0, Math.round((v.volume + amount) * 20) / 20));
-      return 'Volume ' + Math.round(v.volume * 100) + '%%';
+    case 'volume': {
+      const h = window.__cpip;
+      const cur = h && typeof h.opts.volume === 'number' ? h.opts.volume : v.volume;
+      const next = Math.min(1, Math.max(0, Math.round((cur + amount) * 20) / 20));
+      if (h && h.setVolume) h.setVolume(next); else { v.muted = false; v.volume = next; }
+      return 'Volume ' + Math.round(next * 100) + '%%';
+    }
     case 'mute':
       v.muted = !v.muted; return v.muted ? 'Muted' : 'Unmuted';
     case 'videoonly':
@@ -406,7 +409,11 @@ JS_HELPER = r"""
   applyLook();
   document.addEventListener('DOMContentLoaded', applyLook);
 
-  if (window.__cpip) { Object.assign(window.__cpip.opts, OPTS); return 'updated'; }
+  if (window.__cpip) {
+    Object.assign(window.__cpip.opts, OPTS);
+    if (typeof OPTS.volume === 'number') window.__cpip.setVolume(OPTS.volume);
+    return 'updated';
+  }
 
   const css = `
     *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none !important; }
@@ -674,7 +681,44 @@ JS_HELPER = r"""
     return { x: cursor.x, y: cursor.y, h: innerHeight };
   };
 
-  window.__cpip = { opts: OPTS, fill, unfill, toggleFill, pointer, playerFor, state, status };
+  // Volume: remember the level chosen with Couch PiP and keep it. Sites like
+  // YouTube re-apply their own saved volume (new video, ads, audio changes).
+  const ytPlayer = () => {
+    const p = document.getElementById('movie_player');
+    return p && typeof p.setVolume === 'function' ? p : null;
+  };
+  const setVolume = (level) => {
+    window.__cpip.opts.volume = level;
+    const yt = ytPlayer();
+    if (yt) {
+      try { if (yt.isMuted && yt.isMuted()) yt.unMute(); yt.setVolume(Math.round(level * 100)); } catch (e) {}
+    }
+    for (const v of document.querySelectorAll('video')) {
+      v.muted = false;
+      if (Math.abs(v.volume - level) > 0.004) v.volume = level;
+    }
+  };
+  // A change made by hand on the page (its own volume slider) becomes the new level.
+  let lastInput = 0;
+  for (const t of ['pointerdown', 'pointerup', 'keydown', 'wheel']) {
+    document.addEventListener(t, (e) => { if (e.isTrusted) lastInput = Date.now(); }, true);
+  }
+  let keeping = false;
+  const keepVolume = (e) => {
+    const v = e.target;
+    const want = window.__cpip && window.__cpip.opts.volume;
+    if (!(v instanceof HTMLMediaElement) || typeof want !== 'number' || keeping) return;
+    if (Math.abs(v.volume - want) < 0.01) return;
+    if (e.type === 'volumechange' && Date.now() - lastInput < 1500) {
+      window.__cpip.opts.volume = v.volume;  // changed by hand: keep the new level
+      return;
+    }
+    keeping = true;
+    setTimeout(() => { setVolume(want); keeping = false; }, 50);
+  };
+  for (const t of ['volumechange', 'loadedmetadata', 'playing']) document.addEventListener(t, keepVolume, true);
+
+  window.__cpip = { opts: OPTS, fill, unfill, toggleFill, pointer, playerFor, state, status, setVolume };
   return 'installed';
 })()
 """
@@ -853,7 +897,8 @@ class Plugin:
         except Exception as e:
             log.warning(f"couldn't run page helper: {e}")
 
-    async def set_options(self, autofill: bool, safe: bool = False, dark: str = "prefer", opacity: float = 1.0):
+    async def set_options(self, autofill: bool, safe: bool = False, dark: str = "prefer", opacity: float = 1.0,
+                          volume: float | None = None):
         was_safe = bool(self.opts.get("safe"))
         try:
             opacity = min(1.0, max(0.2, float(opacity)))
@@ -861,6 +906,10 @@ class Plugin:
             opacity = 1.0
         self.opts = {**self.opts, "autofill": bool(autofill), "safe": bool(safe),
                      "dark": dark if dark in ("off", "prefer", "force") else "off", "opacity": opacity}
+        try:
+            self.opts["volume"] = None if volume is None else min(1.0, max(0.0, float(volume)))
+        except (TypeError, ValueError):
+            self.opts["volume"] = None
         if self.session and self.session.alive:
             await self._apply_view_settings()
         if not (self.session and self.session.alive):

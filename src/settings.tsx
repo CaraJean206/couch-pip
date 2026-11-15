@@ -71,7 +71,9 @@ const iconButton = { minWidth: 0, padding: "10px 0", flex: 1, display: "flex", j
 const MediaRow = () => {
     const [msg, setMsg] = useState("");
     const act = async (action: string, amount = 0) => {
-        const r = await backend.withPage(getState().url, () => backend.media(action, amount));
+        const r = await backend.withPage(getState().url, () =>
+            action === "volume" ? backend.changeVolume(amount) : backend.media(action, amount),
+        );
         setMsg(r.ok ? String(r.result ?? "") : r.error ?? "");
     };
     return (

@@ -368,8 +368,8 @@ const RemoteModal = ({ closeModal }: { closeModal?: () => void }) => {
             case GamepadButton.OPTIONS: typeText(); break;
             case GamepadButton.BUMPER_LEFT: run(() => backend.media("seek", -10)); break;
             case GamepadButton.BUMPER_RIGHT: run(() => backend.media("seek", 10)); break;
-            case GamepadButton.TRIGGER_LEFT: run(() => backend.media("volume", -0.1)); break;
-            case GamepadButton.TRIGGER_RIGHT: run(() => backend.media("volume", 0.1)); break;
+            case GamepadButton.TRIGGER_LEFT: run(() => backend.changeVolume(-0.1)); break;
+            case GamepadButton.TRIGGER_RIGHT: run(() => backend.changeVolume(0.1)); break;
             case GamepadButton.SELECT: run(() => backend.back()); break;
             case GamepadButton.START: run(() => backend.media("fill", 0)); break;
             case 22: // right trackpad click

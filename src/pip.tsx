@@ -194,11 +194,11 @@ export const computeBounds = (s: State, obs: { nav: number; qam: number }): Rect
 };
 
 /** Connect to the page as soon as it loads, so scrollbars hide and auto-fill works. */
-const useAutoAttach = (url: string, autofill: boolean, safe: boolean, dark: string, opacity: number) => {
+const useAutoAttach = (url: string, autofill: boolean, safe: boolean, dark: string, opacity: number, volume: number | null) => {
     useEffect(() => {
         let cancelled = false;
         (async () => {
-            await backend.setOptions(autofill, safe, dark, opacity);
+            await backend.setOptions(autofill, safe, dark, opacity, volume);
             // Safe mode only connects when the remote is used, unless dark mode or
             // transparency need the connection (they don't change the page itself).
             if (safe && dark === "off" && opacity >= 0.999) return;
@@ -208,12 +208,12 @@ const useAutoAttach = (url: string, autofill: boolean, safe: boolean, dark: stri
         return () => {
             cancelled = true;
         };
-    }, [url, autofill, safe, dark, opacity]);
+    }, [url, autofill, safe, dark, opacity, volume]);
 };
 
 const Pip = () => {
     const s = useStore();
-    useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity);
+    useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity, s.volume);
     const obs = useObstructions();
     const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0 } : obs);
     return <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />;

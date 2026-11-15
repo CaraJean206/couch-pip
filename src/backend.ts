@@ -1,4 +1,5 @@
 import { callable } from "./decky";
+import { setState } from "./store";
 
 export interface Result<T = any> {
     ok: boolean;
@@ -16,7 +17,7 @@ export const insertText = callable<[text: string], Result<string>>("insert_text"
 export const media = callable<[action: string, amount: number], Result<any>>("media");
 export const back = callable<[], Result<string>>("back");
 export const reload = callable<[], Result>("reload");
-export const setOptions = callable<[autofill: boolean, safe: boolean, dark: string, opacity: number], Result>("set_options");
+export const setOptions = callable<[autofill: boolean, safe: boolean, dark: string, opacity: number, volume: number | null], Result>("set_options");
 export const listInputDevices = callable<[], { ok: boolean; error?: string; user?: string; devices?: { name: string; events: string[]; readable: string[]; abs: string }[]; hidraw?: { dev: string; readable: boolean }[] }>("list_input_devices");
 export interface PadStatus { ok: boolean; devices: number; reports: number; touches: number; sent: number; error: string }
 export const padsStart = callable<[], PadStatus>("pads_start");
@@ -47,4 +48,12 @@ export const withPage = async <T>(url: string, action: () => Promise<Result<T>>)
         res = await action();
     }
     return res;
+};
+
+/** Change the volume and remember it, so it's kept when the site resets it. */
+export const changeVolume = async (amount: number): Promise<Result<any>> => {
+    const r = await media("volume", amount);
+    const m = r.ok && typeof r.result === "string" ? /Volume (\d+)%/.exec(r.result) : null;
+    if (m) setState({ volume: Number(m[1]) / 100 });
+    return r;
 };

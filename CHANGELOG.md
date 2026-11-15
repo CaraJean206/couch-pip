@@ -3,6 +3,15 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.10: Volume stays where you set it
+
+- The volume kept jumping back to 90%. Couch PiP set the volume on the video
+  itself, and sites like YouTube re-apply their own saved volume whenever
+  something changes (next video, ads, audio device changes). Now YouTube is
+  told the new volume directly, Couch PiP remembers your level (also across
+  restarts) and puts it back if the site changes it on its own. Changing it
+  with the site's own volume slider still works and becomes the new level.
+
 ## 0.4.9: YouTube only, sign-in and paid-service notes
 
 - The built-in list is now just YouTube. Plex, Twitch, Philo, Paramount+ and

@@ -283,6 +283,75 @@ var definePlugin = (fn) => () => fn();
 var import_ui2 = __toESM(require_ui(), 1);
 var import_react4 = __toESM(require_react(), 1);
 
+// src/store.ts
+var import_react3 = __toESM(require_react(), 1);
+var STORAGE_KEY = "couch-pip";
+var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe", "dark", "opacity", "volume"];
+var defaults = {
+  viewMode: 3 /* Closed */,
+  previousMode: 2 /* Picture */,
+  position: 1 /* TopRight */,
+  visible: true,
+  margin: 0.04,
+  size: 0.28,
+  url: "https://www.youtube.com",
+  bookmarks: [],
+  useDevicePixels: false,
+  showDiagnostics: false,
+  autofill: true,
+  posX: null,
+  posY: null,
+  update: null,
+  safe: false,
+  remoteGuideTop: null,
+  dark: "prefer",
+  opacity: 1,
+  volume: null
+};
+var load = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
+    const state2 = { ...defaults, ...saved };
+    if (!/^https?:\/\//i.test(state2.url)) state2.url = defaults.url;
+    state2.bookmarks = (Array.isArray(state2.bookmarks) ? state2.bookmarks : []).filter(
+      (b) => b && typeof b.name === "string" && /^https?:\/\//i.test(b.url)
+    );
+    if (!["off", "prefer", "force"].includes(state2.dark)) state2.dark = defaults.dark;
+    if (typeof state2.opacity !== "number" || !isFinite(state2.opacity)) state2.opacity = 1;
+    state2.opacity = Math.min(1, Math.max(0.3, state2.opacity));
+    if (typeof state2.volume !== "number" || !isFinite(state2.volume)) state2.volume = null;
+    else state2.volume = Math.min(1, Math.max(0, state2.volume));
+    return state2;
+  } catch {
+    return { ...defaults };
+  }
+};
+var state = load();
+var listeners = /* @__PURE__ */ new Set();
+var getState = () => state;
+var setState = (update) => {
+  const patch = typeof update === "function" ? update(state) : update;
+  state = { ...state, ...patch };
+  try {
+    const saved = {};
+    for (const k of PERSISTED) saved[k] = state[k];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
+  } catch {
+  }
+  listeners.forEach((l) => l(state));
+};
+var useStore = () => {
+  const [s, set] = (0, import_react3.useState)(state);
+  (0, import_react3.useEffect)(() => {
+    listeners.add(set);
+    set(state);
+    return () => {
+      listeners.delete(set);
+    };
+  }, []);
+  return s;
+};
+
 // src/backend.ts
 var attach = callable("attach");
 var detach = callable("detach");
@@ -321,71 +390,11 @@ var withPage = async (url, action) => {
   }
   return res;
 };
-
-// src/store.ts
-var import_react3 = __toESM(require_react(), 1);
-var STORAGE_KEY = "couch-pip";
-var PERSISTED = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe", "dark", "opacity"];
-var defaults = {
-  viewMode: 3 /* Closed */,
-  previousMode: 2 /* Picture */,
-  position: 1 /* TopRight */,
-  visible: true,
-  margin: 0.04,
-  size: 0.28,
-  url: "https://www.youtube.com",
-  bookmarks: [],
-  useDevicePixels: false,
-  showDiagnostics: false,
-  autofill: true,
-  posX: null,
-  posY: null,
-  update: null,
-  safe: false,
-  remoteGuideTop: null,
-  dark: "prefer",
-  opacity: 1
-};
-var load = () => {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "{}");
-    const state2 = { ...defaults, ...saved };
-    if (!/^https?:\/\//i.test(state2.url)) state2.url = defaults.url;
-    state2.bookmarks = (Array.isArray(state2.bookmarks) ? state2.bookmarks : []).filter(
-      (b) => b && typeof b.name === "string" && /^https?:\/\//i.test(b.url)
-    );
-    if (!["off", "prefer", "force"].includes(state2.dark)) state2.dark = defaults.dark;
-    if (typeof state2.opacity !== "number" || !isFinite(state2.opacity)) state2.opacity = 1;
-    state2.opacity = Math.min(1, Math.max(0.3, state2.opacity));
-    return state2;
-  } catch {
-    return { ...defaults };
-  }
-};
-var state = load();
-var listeners = /* @__PURE__ */ new Set();
-var getState = () => state;
-var setState = (update) => {
-  const patch = typeof update === "function" ? update(state) : update;
-  state = { ...state, ...patch };
-  try {
-    const saved = {};
-    for (const k of PERSISTED) saved[k] = state[k];
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(saved));
-  } catch {
-  }
-  listeners.forEach((l) => l(state));
-};
-var useStore = () => {
-  const [s, set] = (0, import_react3.useState)(state);
-  (0, import_react3.useEffect)(() => {
-    listeners.add(set);
-    set(state);
-    return () => {
-      listeners.delete(set);
-    };
-  }, []);
-  return s;
+var changeVolume = async (amount) => {
+  const r = await media("volume", amount);
+  const m = r.ok && typeof r.result === "string" ? /Volume (\d+)%/.exec(r.result) : null;
+  if (m) setState({ volume: Number(m[1]) / 100 });
+  return r;
 };
 
 // src/pip.tsx
@@ -517,11 +526,11 @@ var computeBounds = (s, obs) => {
   }
   return { x: Math.round(x), y: Math.round(y), width, height };
 };
-var useAutoAttach = (url, autofill, safe, dark, opacity) => {
+var useAutoAttach = (url, autofill, safe, dark, opacity, volume) => {
   (0, import_react4.useEffect)(() => {
     let cancelled = false;
     (async () => {
-      await setOptions(autofill, safe, dark, opacity);
+      await setOptions(autofill, safe, dark, opacity, volume);
       if (safe && dark === "off" && opacity >= 0.999) return;
       const r = await ensureAttached(url, 20);
       if (!cancelled && !r.ok) console.warn("Couch PiP: couldn't connect to page", r.error);
@@ -529,11 +538,11 @@ var useAutoAttach = (url, autofill, safe, dark, opacity) => {
     return () => {
       cancelled = true;
     };
-  }, [url, autofill, safe, dark, opacity]);
+  }, [url, autofill, safe, dark, opacity, volume]);
 };
 var Pip = () => {
   const s = useStore();
-  useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity);
+  useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity, s.volume);
   const obs = useObstructions();
   const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0 } : obs);
   return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels });
@@ -1052,10 +1061,10 @@ var RemoteModal = ({ closeModal }) => {
         run(() => media("seek", 10));
         break;
       case import_ui4.GamepadButton.TRIGGER_LEFT:
-        run(() => media("volume", -0.1));
+        run(() => changeVolume(-0.1));
         break;
       case import_ui4.GamepadButton.TRIGGER_RIGHT:
-        run(() => media("volume", 0.1));
+        run(() => changeVolume(0.1));
         break;
       case import_ui4.GamepadButton.SELECT:
         run(() => back());
@@ -1104,7 +1113,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.9" : "0.0.0";
+var VERSION = true ? "0.4.10" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
@@ -1221,7 +1230,10 @@ var iconButton = { minWidth: 0, padding: "10px 0", flex: 1, display: "flex", jus
 var MediaRow = () => {
   const [msg, setMsg] = (0, import_react7.useState)("");
   const act = async (action, amount = 0) => {
-    const r = await withPage(getState().url, () => media(action, amount));
+    const r = await withPage(
+      getState().url,
+      () => action === "volume" ? changeVolume(amount) : media(action, amount)
+    );
     setMsg(r.ok ? String(r.result ?? "") : r.error ?? "");
   };
   return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)(import_jsx_runtime4.Fragment, { children: [

@@ -25,10 +25,11 @@ export interface State {
     remoteGuideTop: number | null; // where the remote's guide starts on screen (CSS px)
     dark: "off" | "prefer" | "force"; // prefer = use sites' dark theme; force = darken every site
     opacity: number; // 0.3 .. 1 (1 = solid)
+    volume: number | null; // 0..1 chosen with Couch PiP, kept on the page (null: the site's own)
 }
 
 const STORAGE_KEY = "couch-pip";
-const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe", "dark", "opacity"];
+const PERSISTED: (keyof State)[] = ["position", "margin", "size", "url", "bookmarks", "useDevicePixels", "autofill", "posX", "posY", "safe", "dark", "opacity", "volume"];
 
 const defaults: State = {
     viewMode: ViewMode.Closed,
@@ -49,6 +50,7 @@ const defaults: State = {
     remoteGuideTop: null,
     dark: "prefer",
     opacity: 1,
+    volume: null,
 };
 
 const load = (): State => {
@@ -63,6 +65,8 @@ const load = (): State => {
         if (!["off", "prefer", "force"].includes(state.dark)) state.dark = defaults.dark;
         if (typeof state.opacity !== "number" || !isFinite(state.opacity)) state.opacity = 1;
         state.opacity = Math.min(1, Math.max(0.3, state.opacity));
+        if (typeof state.volume !== "number" || !isFinite(state.volume)) state.volume = null;
+        else state.volume = Math.min(1, Math.max(0, state.volume));
         return state;
     } catch {
         return { ...defaults };
