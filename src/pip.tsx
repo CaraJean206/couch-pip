@@ -73,7 +73,7 @@ export const viewFunctions = () => {
     return `View: ${names(currentView).join(", ")}\n\nBrowser: ${browser ? names(browser).join(", ") : "?"}`;
 };
 
-const Browser = ({ url, visible, bounds, devicePixels }: { url: string; visible: boolean; bounds: Rect; devicePixels: boolean }) => {
+const Browser = ({ url, visible, bounds, devicePixels, controlling }: { url: string; visible: boolean; bounds: Rect; devicePixels: boolean; controlling: boolean }) => {
     useUIComposition?.(UIComposition.Notification);
 
     const [{ view, browser }] = useState(() => {
@@ -86,6 +86,23 @@ const Browser = ({ url, visible, bounds, devicePixels }: { url: string; visible:
     useEffect(() => {
         browser.SetVisible(visible);
     }, [visible]);
+
+    // Clicking in the page (with the remote) makes Steam give this browser real
+    // focus, and then the controller goes to the page instead of Steam's menus
+    // and other plugins. Unless the remote is open, keep handing focus back.
+    useEffect(() => {
+        if (controlling) return;
+        const release = () => {
+            try {
+                browser.SetFocus?.(false);
+            } catch {
+                // ignore
+            }
+        };
+        release();
+        const timer = setInterval(release, 1000);
+        return () => clearInterval(timer);
+    }, [controlling, url, visible]);
     useEffect(() => {
         view.LoadURL(url);
     }, [url]);
@@ -216,7 +233,15 @@ const Pip = () => {
     useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity, s.volume);
     const obs = useObstructions();
     const bounds = computeBounds(s, s.viewMode === ViewMode.Remote ? { nav: 0, qam: 0 } : obs);
-    return <Browser url={s.url} visible={s.visible} bounds={bounds} devicePixels={s.useDevicePixels} />;
+    return (
+        <Browser
+            url={s.url}
+            visible={s.visible}
+            bounds={bounds}
+            devicePixels={s.useDevicePixels}
+            controlling={s.viewMode === ViewMode.Remote}
+        />
+    );
 };
 
 export const PipOuter = () => {

@@ -434,7 +434,7 @@ var viewFunctions = () => {
 
 Browser: ${browser ? names(browser).join(", ") : "?"}`;
 };
-var Browser = ({ url, visible, bounds, devicePixels }) => {
+var Browser = ({ url, visible, bounds, devicePixels, controlling }) => {
   useUIComposition?.(1 /* Notification */);
   const [{ view, browser }] = (0, import_react4.useState)(() => {
     const root = import_ui2.Router.WindowStore?.GamepadUIMainWindowInstance;
@@ -445,6 +445,18 @@ var Browser = ({ url, visible, bounds, devicePixels }) => {
   (0, import_react4.useEffect)(() => {
     browser.SetVisible(visible);
   }, [visible]);
+  (0, import_react4.useEffect)(() => {
+    if (controlling) return;
+    const release = () => {
+      try {
+        browser.SetFocus?.(false);
+      } catch {
+      }
+    };
+    release();
+    const timer = setInterval(release, 1e3);
+    return () => clearInterval(timer);
+  }, [controlling, url, visible]);
   (0, import_react4.useEffect)(() => {
     view.LoadURL(url);
   }, [url]);
@@ -545,7 +557,16 @@ var Pip = () => {
   useAutoAttach(s.url, s.autofill, s.safe, s.dark, s.opacity, s.volume);
   const obs = useObstructions();
   const bounds = computeBounds(s, s.viewMode === 4 /* Remote */ ? { nav: 0, qam: 0 } : obs);
-  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Browser, { url: s.url, visible: s.visible, bounds, devicePixels: s.useDevicePixels });
+  return /* @__PURE__ */ (0, import_jsx_runtime.jsx)(
+    Browser,
+    {
+      url: s.url,
+      visible: s.visible,
+      bounds,
+      devicePixels: s.useDevicePixels,
+      controlling: s.viewMode === 4 /* Remote */
+    }
+  );
 };
 var PipOuter = () => {
   const { viewMode } = useStore();
@@ -1113,7 +1134,7 @@ var RemoteModal = ({ closeModal }) => {
 var showRemote = () => (0, import_ui4.showModal)(/* @__PURE__ */ (0, import_jsx_runtime3.jsx)(RemoteModal, {}));
 
 // src/updates.ts
-var VERSION = true ? "0.4.10" : "0.0.0";
+var VERSION = true ? "0.4.11" : "0.0.0";
 var VERSION_URL = "https://raw.githubusercontent.com/CaraJean206/couch-pip/main/version.json";
 var isNewer = (a, b) => {
   const pa = a.split(".").map((n) => parseInt(n, 10) || 0);

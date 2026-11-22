@@ -35,6 +35,15 @@ def build_zip():
             with open(os.path.join(ROOT, f), "rb") as src:
                 z.writestr(info, src.read())
     print(f"wrote {ZIP} sha256={sha256(ZIP)}")
+    # A copy named with the version, kept in releases/. The install link and the
+    # self-updater use couch-pip.zip, so that name must stay as it is.
+    with open(os.path.join(ROOT, "package.json")) as f:
+        version = json.load(f)["version"]
+    os.makedirs(os.path.join(ROOT, "releases"), exist_ok=True)
+    named = os.path.join(ROOT, "releases", f"couch-pip-{version}.zip")
+    with open(ZIP, "rb") as src, open(named, "wb") as dst:
+        dst.write(src.read())
+    print(f"wrote {named}")
 
 
 def sha256(path):

@@ -3,6 +3,14 @@
 All versions of Couch PiP, newest first. Every version was tested on a Steam
 Machine before the next one was made.
 
+## 0.4.11: Controller no longer gets stuck in the picture
+
+- After using the remote to click in a page (for example to start a video),
+  Steam kept sending the controller to the picture. Steam's menus and other
+  plugins stopped responding, and B couldn't back out. The picture now hands
+  the controller back to Steam whenever the remote isn't open.
+- Each release is also saved as `releases/couch-pip-<version>.zip`.
+
 ## 0.4.10: Volume stays where you set it
 
 - The volume kept jumping back to 90%. Couch PiP set the volume on the video
