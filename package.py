@@ -27,11 +27,11 @@ ZIP = os.path.join(ROOT, "couch-pip.zip")
 
 
 def build_zip():
-    with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_DEFLATED) as z:
+    with zipfile.ZipFile(ZIP, "w", zipfile.ZIP_STORED) as z:
         for f in FILES:
             info = zipfile.ZipInfo(f"couch-pip/{f}", date_time=(2026, 1, 1, 0, 0, 0))
             info.external_attr = 0o644 << 16
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = zipfile.ZIP_STORED  # no compression: identical on every machine
             with open(os.path.join(ROOT, f), "rb") as src:
                 z.writestr(info, src.read())
     print(f"wrote {ZIP} sha256={sha256(ZIP)}")
